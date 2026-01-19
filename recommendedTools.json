@@ -1,0 +1,38 @@
+{
+  "recommended": [
+    {
+      "id": "maain_application_generator",
+      "name": "Generate a Web Application",
+      "description": "Generate a runnable one-page React app (styled-components, inline tokens) plus design doc, issues, and defa manifest ready for the sandbox.",
+      "capabilities": ["generate-web-app","scaffold-application","create-sandbox"],
+      "inputs": ["schema","text"],
+      "outputs": ["sandbox-url","source-code"],
+      "slidesetId": "maain-workflow-execution-path",
+      "maturity": "stable",
+      "entryIntent": "demo"
+    },
+    {
+      "id": "media-generation-workflow-001",
+      "name": "Create Visual Media",
+      "description": "Plan and generate AI media: build scripts, scenes, narration, and background music, then optionally mix into shareable audio/video from a single prompt.",
+      "capabilities": ["create-visuals","generate-images","generate-video"],
+      "inputs": ["text-prompt"],
+      "outputs": ["image","video"],
+      "slidesetId": "slideset-media-generation-001",
+      "maturity": "stable",
+      "entryIntent": "demo"
+    },
+    {
+      "id": "github-repo-sync_001",
+      "name": "Sync Outputs to GitHub",
+      "description": "Send generated files, execution results, or manifests directly into a GitHub repository.",
+      "capabilities": ["sync-to-github","export-code","repository-automation"],
+      "inputs": ["execution-id","repository"],
+      "outputs": ["commit","pull-request"],
+      "slidesetId": "github-repo-sync_001",
+      "maturity": "stable",
+      "entryIntent": "internal"
+    }
+  ],
+  "why": "These workflows will allow you to generate the full-featured mobile-first fitness tracker app, produce visual assets for branding and marketing, and sync outputs to GitHub for version control and collaboration."
+}

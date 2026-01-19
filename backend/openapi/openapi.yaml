@@ -1,0 +1,694 @@
+openapi: 3.0.3
+info:
+  title: Nomadic Gym Life Fitness Tracker API
+  version: 1.0.0
+  description: |
+    Backend API for the Nomadic Gym Life mobile-first fitness tracker and preset plan viewer. Manual-entry only, no recommendations, no auth.
+servers:
+  - url: /api
+paths:
+  /tracker/weeks:
+    get:
+      summary: List all weeks in the fitness tracker
+      responses:
+        '200':
+          description: List of weeks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Week'
+    post:
+      summary: Create a new week
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WeekInput'
+      responses:
+        '201':
+          description: Created week
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Week'
+  /tracker/weeks/{weekId}:
+    get:
+      summary: Get a week by ID
+      parameters:
+        - in: path
+          name: weekId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Week
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Week'
+    delete:
+      summary: Delete a week
+      parameters:
+        - in: path
+          name: weekId
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+  /tracker/weeks/{weekId}/sessions:
+    get:
+      summary: List all sessions for a week
+      parameters:
+        - in: path
+          name: weekId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Session'
+    post:
+      summary: Create a session in a week
+      parameters:
+        - in: path
+          name: weekId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionInput'
+      responses:
+        '201':
+          description: Created session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+  /tracker/sessions/{sessionId}:
+    get:
+      summary: Get a session by ID
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+    patch:
+      summary: Update a session
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionInput'
+      responses:
+        '200':
+          description: Updated session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+    delete:
+      summary: Delete a session
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+  /tracker/sessions/{sessionId}/entries:
+    get:
+      summary: List all exercise entries in a session
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExerciseEntry'
+    post:
+      summary: Add an exercise entry to a session
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExerciseEntryInput'
+      responses:
+        '201':
+          description: Created entry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExerciseEntry'
+  /tracker/entries/{entryId}:
+    patch:
+      summary: Update an exercise entry
+      parameters:
+        - in: path
+          name: entryId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExerciseEntryInput'
+      responses:
+        '200':
+          description: Updated entry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExerciseEntry'
+    delete:
+      summary: Delete an exercise entry
+      parameters:
+        - in: path
+          name: entryId
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+  /nutrition/days:
+    get:
+      summary: List all nutrition days
+      responses:
+        '200':
+          description: List of nutrition days
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NutritionDay'
+    post:
+      summary: Create a nutrition day
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NutritionDayInput'
+      responses:
+        '201':
+          description: Created nutrition day
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NutritionDay'
+  /nutrition/days/{dayId}:
+    get:
+      summary: Get a nutrition day by ID
+      parameters:
+        - in: path
+          name: dayId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Nutrition day
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NutritionDay'
+    patch:
+      summary: Update a nutrition day
+      parameters:
+        - in: path
+          name: dayId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NutritionDayInput'
+      responses:
+        '200':
+          description: Updated nutrition day
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NutritionDay'
+    delete:
+      summary: Delete a nutrition day
+      parameters:
+        - in: path
+          name: dayId
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+  /nutrition/days/{dayId}/meals:
+    get:
+      summary: List all meals for a nutrition day
+      parameters:
+        - in: path
+          name: dayId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of meals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Meal'
+    post:
+      summary: Add a meal to a nutrition day
+      parameters:
+        - in: path
+          name: dayId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MealInput'
+      responses:
+        '201':
+          description: Created meal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Meal'
+  /nutrition/meals/{mealId}:
+    patch:
+      summary: Update a meal
+      parameters:
+        - in: path
+          name: mealId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MealInput'
+      responses:
+        '200':
+          description: Updated meal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Meal'
+    delete:
+      summary: Delete a meal
+      parameters:
+        - in: path
+          name: mealId
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+  /plans:
+    get:
+      summary: List all preset workout plans
+      responses:
+        '200':
+          description: List of plans
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Plan'
+  /plans/{planId}:
+    get:
+      summary: Get a preset plan by ID
+      parameters:
+        - in: path
+          name: planId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Plan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plan'
+  /plans/{planId}/download:
+    get:
+      summary: Download a plan (PDF or JSON)
+      parameters:
+        - in: path
+          name: planId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: format
+          required: false
+          schema:
+            type: string
+            enum: [pdf, json]
+      responses:
+        '200':
+          description: Plan download
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plan'
+  /exercise-library:
+    get:
+      summary: List all exercises
+      responses:
+        '200':
+          description: List of exercises
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Exercise'
+  /exercise-library/{exerciseId}:
+    get:
+      summary: Get exercise by ID
+      parameters:
+        - in: path
+          name: exerciseId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Exercise
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Exercise'
+  /affiliate/promotion:
+    get:
+      summary: Get affiliate promotion info
+      responses:
+        '200':
+          description: Affiliate promotion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AffiliatePromotion'
+components:
+  schemas:
+    Week:
+      type: object
+      properties:
+        id:
+          type: string
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        label:
+          type: string
+      required: [id, startDate, endDate, label]
+    WeekInput:
+      type: object
+      properties:
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        label:
+          type: string
+      required: [startDate, endDate, label]
+    Session:
+      type: object
+      properties:
+        id:
+          type: string
+        weekId:
+          type: string
+        day:
+          type: string
+          enum: [Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday]
+        time:
+          type: string
+          enum: [AM, PM]
+        label:
+          type: string
+      required: [id, weekId, day, time, label]
+    SessionInput:
+      type: object
+      properties:
+        day:
+          type: string
+          enum: [Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday]
+        time:
+          type: string
+          enum: [AM, PM]
+        label:
+          type: string
+      required: [day, time, label]
+    ExerciseEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        sessionId:
+          type: string
+        exerciseId:
+          type: string
+        sets:
+          type: array
+          items:
+            $ref: '#/components/schemas/SetEntry'
+      required: [id, sessionId, exerciseId, sets]
+    ExerciseEntryInput:
+      type: object
+      properties:
+        exerciseId:
+          type: string
+        sets:
+          type: array
+          items:
+            $ref: '#/components/schemas/SetEntry'
+      required: [exerciseId, sets]
+    SetEntry:
+      type: object
+      properties:
+        weight:
+          type: number
+        reps:
+          type: integer
+        rpe:
+          type: number
+        duration:
+          type: integer
+          description: In minutes (for yoga/cardio)
+      required: []
+    NutritionDay:
+      type: object
+      properties:
+        id:
+          type: string
+        date:
+          type: string
+          format: date
+        macroGoals:
+          $ref: '#/components/schemas/MacroGoals'
+      required: [id, date, macroGoals]
+    NutritionDayInput:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        macroGoals:
+          $ref: '#/components/schemas/MacroGoals'
+      required: [date, macroGoals]
+    MacroGoals:
+      type: object
+      properties:
+        protein:
+          type: integer
+        carbs:
+          type: integer
+        fat:
+          type: integer
+        calories:
+          type: integer
+      required: [protein, carbs, fat, calories]
+    Meal:
+      type: object
+      properties:
+        id:
+          type: string
+        dayId:
+          type: string
+        type:
+          type: string
+          enum: [Breakfast, Lunch, Dinner, Snack]
+        macros:
+          $ref: '#/components/schemas/MacroGoals'
+      required: [id, dayId, type, macros]
+    MealInput:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [Breakfast, Lunch, Dinner, Snack]
+        macros:
+          $ref: '#/components/schemas/MacroGoals'
+      required: [type, macros]
+    Plan:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        category:
+          type: string
+          enum: [Lightweight / Getting Started, Minimal Equipment (Van Life), Gym Membership (Van + Gym)]
+        description:
+          type: string
+        chart:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanDay'
+      required: [id, title, category, description, chart]
+    PlanDay:
+      type: object
+      properties:
+        day:
+          type: string
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanSession'
+      required: [day, sessions]
+    PlanSession:
+      type: object
+      properties:
+        label:
+          type: string
+        exercises:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanExercise'
+      required: [label, exercises]
+    PlanExercise:
+      type: object
+      properties:
+        exerciseId:
+          type: string
+        sets:
+          type: integer
+        reps:
+          type: integer
+        duration:
+          type: integer
+          description: In minutes (for yoga/cardio)
+      required: [exerciseId]
+    Exercise:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        image:
+          type: string
+          format: uri
+        type:
+          type: string
+          enum: [Strength, Cardio, Yoga]
+        yogaCategory:
+          type: string
+          enum: [10 min quick session, 30 min core, Balance, Stretch, Flow, Flow on the go, Abs, Recovery]
+          nullable: true
+      required: [id, title, description, image, type]
+    AffiliatePromotion:
+      type: object
+      properties:
+        cta:
+          type: string
+        url:
+          type: string
+          format: uri
+        qrCodeUrl:
+          type: string
+          format: uri
+        disclosure:
+          type: string
+        copy:
+          type: string
+      required: [cta, url, qrCodeUrl, disclosure, copy]
