@@ -34,6 +34,22 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Week'
+  /tracker/weeks/inject:
+    post:
+      summary: Inject a preset plan into a new week
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InjectPlanRequest'
+      responses:
+        '201':
+          description: Injected week
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Week'
   /tracker/weeks/{weekId}:
     get:
       summary: Get a week by ID
@@ -243,6 +259,22 @@ paths:
       responses:
         '201':
           description: Created nutrition day
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NutritionDay'
+  /nutrition/days/upsert:
+    post:
+      summary: Upsert a nutrition day by date
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NutritionDayUpsert'
+      responses:
+        '200':
+          description: Upserted nutrition day
           content:
             application/json:
               schema:
@@ -466,6 +498,10 @@ components:
       properties:
         id:
           type: string
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Session'
         startDate:
           type: string
           format: date
@@ -474,7 +510,7 @@ components:
           format: date
         label:
           type: string
-      required: [id, startDate, endDate, label]
+      required: [id, sessions, startDate, endDate, label]
     WeekInput:
       type: object
       properties:
@@ -492,8 +528,6 @@ components:
       properties:
         id:
           type: string
-        weekId:
-          type: string
         day:
           type: string
           enum: [Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday]
@@ -502,7 +536,11 @@ components:
           enum: [AM, PM]
         label:
           type: string
-      required: [id, weekId, day, time, label]
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExerciseEntry'
+      required: [id, day, time, label, entries]
     SessionInput:
       type: object
       properties:
@@ -520,15 +558,13 @@ components:
       properties:
         id:
           type: string
-        sessionId:
-          type: string
         exerciseId:
           type: string
         sets:
           type: array
           items:
             $ref: '#/components/schemas/SetEntry'
-      required: [id, sessionId, exerciseId, sets]
+      required: [id, exerciseId, sets]
     ExerciseEntryInput:
       type: object
       properties:
@@ -549,9 +585,17 @@ components:
         rpe:
           type: number
         duration:
-          type: integer
-          description: In minutes (for yoga/cardio)
+          $ref: '#/components/schemas/Duration'
       required: []
+    Duration:
+      type: object
+      properties:
+        value:
+          type: number
+        unit:
+          type: string
+          enum: [sec, min, hr]
+      required: [value, unit]
     NutritionDay:
       type: object
       properties:
@@ -560,29 +604,56 @@ components:
         date:
           type: string
           format: date
-        macroGoals:
-          $ref: '#/components/schemas/MacroGoals'
-      required: [id, date, macroGoals]
+        calories:
+          type: number
+        macroPercents:
+          $ref: '#/components/schemas/MacroPercents'
+        meals:
+          type: array
+          items:
+            $ref: '#/components/schemas/Meal'
+      required: [id, date, calories, macroPercents, meals]
     NutritionDayInput:
       type: object
       properties:
         date:
           type: string
           format: date
-        macroGoals:
-          $ref: '#/components/schemas/MacroGoals'
-      required: [date, macroGoals]
+        calories:
+          type: number
+        macroPercents:
+          $ref: '#/components/schemas/MacroPercents'
+      required: [date, calories, macroPercents]
+    NutritionDayUpsert:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        patch:
+          $ref: '#/components/schemas/NutritionDay'
+      required: [date, patch]
+    MacroPercents:
+      type: object
+      properties:
+        protein:
+          type: number
+        carbs:
+          type: number
+        fat:
+          type: number
+      required: [protein, carbs, fat]
     MacroGoals:
       type: object
       properties:
         protein:
-          type: integer
+          type: number
         carbs:
-          type: integer
+          type: number
         fat:
-          type: integer
+          type: number
         calories:
-          type: integer
+          type: number
       required: [protein, carbs, fat, calories]
     Meal:
       type: object
@@ -653,9 +724,19 @@ components:
         reps:
           type: integer
         duration:
-          type: integer
-          description: In minutes (for yoga/cardio)
+          $ref: '#/components/schemas/Duration'
       required: [exerciseId]
+    InjectPlanRequest:
+      type: object
+      properties:
+        planId:
+          type: string
+        startDate:
+          type: string
+          format: date
+        weekLabel:
+          type: string
+      required: [planId, startDate, weekLabel]
     Exercise:
       type: object
       properties:
@@ -670,10 +751,10 @@ components:
           format: uri
         type:
           type: string
-          enum: [Strength, Cardio, Yoga]
+          enum: [Strength, Cardio, Yoga, Warmup, Core, Conditioning]
         yogaCategory:
           type: string
-          enum: [10 min quick session, 30 min core, Balance, Stretch, Flow, Flow on the go, Abs, Recovery]
+          enum: [10 min quick session, 30 min core, Balance, Stretch, Flow, Flow on the go, Abs, Recovery, Core]
           nullable: true
       required: [id, title, description, image, type]
     AffiliatePromotion:

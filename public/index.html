@@ -3,39 +3,39 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
-  <meta name="theme-color" content="#000000" />
+  <meta name="theme-color" content="#3E4C59" />
   <!--
     manifest.json provides metadata used when your web app is added to MAAiN similiar to an Android App. See https://developers.google.com/web/fundamentals/engage-and-retain/web-app-manifest/
   -->
-  {{#manifestPublicUrl}}<link rel="manifest" href="{{manifestPublicUrl}}" />{{/manifestPublicUrl}}
-  {{#favicon}}<link rel="shortcut icon" href="{{favicon}}" />{{/favicon}}
+  <link rel="manifest" href="/defa-manifest.json" />
+  <link rel="shortcut icon" href="https://cdn-icons-png.flaticon.com/512/1048/1048953.png" />
 
-  {{#description}}<meta name="description" content="{{description}}" />{{/description}}
-  {{#csvKeywords}}<meta name="keywords" content="{{csvKeywords}}" />{{/csvKeywords}}
-  {{#author}}<meta name="author" content="{{author}}" />{{/author}}
+  <meta name="description" content="Nomadic Gym Life is a mobile-first React fitness tracker app with inline CMS, preset workout plans, nutrition tracking, and an exercise library, styled with inline theme tokens and styled-components." />
+  <meta name="keywords" content="fitness tracker, mobile-first, React app, styled-components, inline CMS, workout plans, nutrition tracking, exercise library, van life, gym, yoga, affiliate promotion" />
+  <meta name="author" content="MAAiN" />
   <meta name="robots" content="index, follow" />
 
   
   <meta property="og:type" content="website" />
-  {{#ogTitle}}<!-- Open Graph / Facebook --><meta property="og:title" content="{{ogTitle}}" />{{/ogTitle}}
-  {{#ogDescription}}<meta property="og:description" content="{{ogDescription}}" />{{/ogDescription}}
-  {{#ogImage}}<meta property="og:image" content="{{ogImage}}" />{{/ogImage}}
-  {{#ogImageAlt}}<meta property="og:image:alt" content="{{ogImageAlt}}" />{{/ogImageAlt}}
-  {{#ogImageUrl}}<meta property="og:url" content="{{ogImageUrl}}" />{{/ogImageUrl}}
+  <!-- Open Graph / Facebook -->
+  <meta property="og:title" content="Nomadic Gym Life – Mobile Fitness & Plans App" />
+  <meta property="og:description" content="Track your workouts, manage nutrition, browse preset plans, and explore exercises on the go. Built for van life, gym goers, and digital nomads." />
+  <meta property="og:image" content="https://cdn-icons-png.flaticon.com/512/1048/1048953.png" />
+  <meta property="og:image:alt" content="Nomadic Gym Life App Logo" />
+  <meta property="og:url" content="https://cdn-icons-png.flaticon.com/512/1048/1048953.png" />
 
  
-  {{#twitterImage}} <!-- Twitter --><meta name="twitter:card" content="summary_large_image" /><meta name="twitter:image" content="{{twitterImage}}" />{{/twitterImage}}
-  {{#twitterTitle}}<meta name="twitter:title" content="{{twitterTitle}}" />{{/twitterTitle}}
-  {{#twitterDescription}}<meta name="twitter:description" content="{{twitterDescription}}" />{{/twitterDescription}}
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:image" content="https://cdn-icons-png.flaticon.com/512/1048/1048953.png" />
+  <meta name="twitter:title" content="Nomadic Gym Life – Mobile Fitness & Plans App" />
+  <meta name="twitter:description" content="Track workouts, nutrition, and preset plans anywhere with this mobile-first fitness app for nomads and gym lovers." />
 
   <!--
     Notice the use of templates in the tags above.
     They will be replaced with values from the manifest during the build.
   -->
-  <title>
-    {{#title}}{{title}}{{/title}}
-    {{^title}}MAAiN Sandbox{{/title}}
-  </title>
+  <title>Nomadic Gym Life – Mobile Fitness Tracker & Plans</title>
 </head>
 <body>
   <noscript>You need to enable JavaScript to run this app.</noscript>
