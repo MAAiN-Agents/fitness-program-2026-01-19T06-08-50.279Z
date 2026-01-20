@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 type Theme = {
   colors: {
@@ -39,15 +39,16 @@ type Theme = {
 export type ProgressEntry = {
   id: string;
   date: string;
-  weight?: number;
-  photoUrl?: string;
+  weight?: number | null;
+  coverUrl?: string | null;
+  photoUrls?: string[];
 };
 
 type Props = {
   theme: Theme;
   entries: ProgressEntry[];
   loading: boolean;
-  onUpload: (payload: { date: string; weight: string; file: File }) => Promise<void>;
+  onUpload: (payload: { date: string; weight: string; files: File[]; coverIndex: number }) => Promise<void>;
 };
 
 const formatDisplayDate = (value: string) => {
@@ -60,19 +61,26 @@ const formatDisplayDate = (value: string) => {
 function FitnessProgressTab({ theme, entries, loading, onUpload }: Props) {
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [weight, setWeight] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-  const isReady = Boolean(file);
+  const [files, setFiles] = useState<File[]>([]);
+  const [coverIndex, setCoverIndex] = useState(0);
+  const isReady = files.length > 0;
 
   const sortedEntries = useMemo(
     () => [...entries].sort((a, b) => b.date.localeCompare(a.date)),
     [entries]
   );
+  const previewUrls = useMemo(() => files.map(file => URL.createObjectURL(file)), [files]);
+
+  useEffect(() => () => {
+    previewUrls.forEach(url => URL.revokeObjectURL(url));
+  }, [previewUrls]);
 
   const handleSubmit = async () => {
-    if (!file) return;
-    await onUpload({ date, weight, file });
+    if (files.length === 0) return;
+    await onUpload({ date, weight, files, coverIndex });
     setWeight("");
-    setFile(null);
+    setFiles([]);
+    setCoverIndex(0);
   };
 
   return (
@@ -127,14 +135,67 @@ function FitnessProgressTab({ theme, entries, loading, onUpload }: Props) {
           }}
         />
         <label style={{ display: "block", font: theme.font.body, color: theme.colors.textSecondary }}>
-          Progress photo
+          Progress photos (up to 10)
         </label>
         <input
           type="file"
           accept="image/*"
-          onChange={event => setFile(event.target.files?.[0] || null)}
+          multiple
+          onChange={event => {
+            const nextFiles = Array.from(event.target.files || []).slice(0, 10);
+            setFiles(nextFiles);
+            setCoverIndex(0);
+          }}
           style={{ marginBottom: theme.spacing.sm }}
         />
+        {files.length > 0 && (
+          <div
+            data-component="ProgressUploadPreview"
+            style={{
+              display: "flex",
+              gap: theme.spacing.sm,
+              overflowX: "auto",
+              paddingBottom: theme.spacing.xs,
+              marginBottom: theme.spacing.sm,
+            }}
+          >
+            {previewUrls.map((url, index) => (
+              <button
+                key={url}
+                type="button"
+                onClick={() => setCoverIndex(index)}
+                style={{
+                  border: index === coverIndex
+                    ? `2px solid ${theme.colors.accent2}`
+                    : `1px solid ${theme.colors.border}`,
+                  background: "transparent",
+                  borderRadius: theme.radii.input,
+                  padding: 2,
+                  cursor: "pointer",
+                }}
+                aria-label={`Set cover photo ${index + 1}`}
+              >
+                <img
+                  src={url}
+                  alt={`Selected progress ${index + 1}`}
+                  style={{ width: 64, height: 64, objectFit: "cover", borderRadius: theme.radii.input }}
+                />
+                {index === coverIndex && (
+                  <div
+                    style={{
+                      marginTop: 4,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: theme.colors.accent2,
+                    }}
+                  >
+                    Cover photo
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
         <button
           type="button"
           data-component="ProgressUploadButton"
@@ -166,7 +227,9 @@ function FitnessProgressTab({ theme, entries, loading, onUpload }: Props) {
         {sortedEntries.length === 0 && (
           <div style={{ color: theme.colors.textSecondary }}>No progress entries yet.</div>
         )}
-        {sortedEntries.map(entry => (
+        {sortedEntries.map(entry => {
+          const coverUrl = entry.coverUrl || entry.photoUrls?.[0] || null;
+          return (
           <div
             key={entry.id}
             data-component="ProgressCard"
@@ -179,9 +242,9 @@ function FitnessProgressTab({ theme, entries, loading, onUpload }: Props) {
               gap: theme.spacing.xs,
             }}
           >
-            {entry.photoUrl ? (
+            {coverUrl ? (
               <img
-                src={entry.photoUrl}
+                src={coverUrl}
                 alt={`Progress on ${entry.date}`}
                 style={{
                   width: "100%",
@@ -212,8 +275,37 @@ function FitnessProgressTab({ theme, entries, loading, onUpload }: Props) {
             <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>
               {entry.weight ? `${entry.weight} lbs` : "No weigh-in"}
             </div>
+            {entry.photoUrls && entry.photoUrls.length > 0 && (
+              <div
+                data-component="ProgressThumbRow"
+                style={{
+                  display: "flex",
+                  gap: theme.spacing.xs,
+                  overflowX: "auto",
+                  paddingBottom: theme.spacing.xs,
+                }}
+              >
+                {entry.photoUrls.map((url, index) => (
+                  <img
+                    key={`${entry.id}-${index}`}
+                    src={url}
+                    alt={`Progress thumbnail ${index + 1}`}
+                    style={{
+                      width: 48,
+                      height: 48,
+                      objectFit: "cover",
+                      borderRadius: theme.radii.input,
+                      border: url === coverUrl
+                        ? `2px solid ${theme.colors.accent2}`
+                        : `1px solid ${theme.colors.border}`,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
           </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );

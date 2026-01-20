@@ -987,15 +987,23 @@ const CalendarDayButton = styled.button.attrs(dataComponent('CalendarDayButton')
     border-color: ${theme.colors.success};
   `}
 `;
-const CalendarDot = styled.span.attrs(dataComponent('CalendarDot'))`
+const CalendarDotRow = styled.div.attrs(dataComponent('CalendarDotRow'))`
   position: absolute;
   bottom: 6px;
   left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+`;
+const CalendarDot = styled.span.attrs(dataComponent('CalendarDot'))`
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  transform: translateX(-50%);
   background: ${theme.colors.accent};
+`;
+const ProgressDot = styled(CalendarDot).attrs(dataComponent('ProgressDot'))`
+  background: ${theme.colors.accent2};
 `;
 const DatePager = styled.div.attrs(dataComponent('DatePager'))`
   display: flex;
@@ -1656,6 +1664,11 @@ function App() {
   }, [profileOpen]);
 
   const nutritionDates = new Set(nutritionDays.map(d => d.date));
+  const progressDates = new Set(
+    progressEntries
+      .filter(entry => (entry.photoUrls && entry.photoUrls.length > 0) || entry.coverUrl)
+      .map(entry => entry.date)
+  );
   const sortedNutritionDates = [...nutritionDays]
     .map(d => d.date)
     .sort();
@@ -1815,7 +1828,7 @@ function App() {
     }
   };
 
-  const handleProgressUpload = async (payload: { date: string; weight: string; file: File }) => {
+  const handleProgressUpload = async (payload: { date: string; weight: string; files: File[]; coverIndex: number }) => {
     if (!isAuthed) {
       setAuthError("Sign in to upload progress.");
       return;
@@ -1826,7 +1839,10 @@ function App() {
     if (payload.weight) {
       formData.append("weight", payload.weight);
     }
-    formData.append("photo", payload.file, payload.file.name);
+    formData.append("coverIndex", String(payload.coverIndex));
+    payload.files.forEach(file => {
+      formData.append("photos", file, file.name);
+    });
     await api.createProgressEntry(formData);
     await refreshProgressEntries();
     setProgressLoading(false);
@@ -1901,6 +1917,7 @@ function App() {
           const isInMonth = date.getMonth() === calendarMonth.getMonth();
           const isSelected = dateKey === selectedDate;
           const hasNutrition = nutritionDates.has(dateKey);
+          const hasProgress = progressDates.has(dateKey);
           const hasWorkout = hasWorkoutDay(date);
           return (
             <CalendarDayButton
@@ -1913,7 +1930,12 @@ function App() {
               }}
             >
               {date.getDate()}
-              {hasNutrition && <CalendarDot />}
+              {(hasNutrition || hasProgress) && (
+                <CalendarDotRow>
+                  {hasNutrition && <CalendarDot />}
+                  {hasProgress && <ProgressDot />}
+                </CalendarDotRow>
+              )}
             </CalendarDayButton>
           );
         })}
@@ -1922,6 +1944,10 @@ function App() {
         <LegendItem>
           <LegendSwatch $color={theme.colors.accent} />
           Nutrition logged
+        </LegendItem>
+        <LegendItem>
+          <LegendSwatch $color={theme.colors.accent2} />
+          Progress photos
         </LegendItem>
         <LegendItem>
           <LegendSwatch $color="rgba(67, 170, 139, 0.12)" />

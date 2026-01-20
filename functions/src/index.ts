@@ -17,7 +17,7 @@ type NutritionDayInput = { date: string; calories: number; macroPercents: MacroP
 type NutritionDayUpsert = { date: string; patch: { id?: string; date: string; calories: number; macroPercents: MacroPercents; meals: Array<{ id: string; dayId: string; type: string; macros: { protein: number; carbs: number; fat: number; calories: number } }> } };
 type MealInput = { type: string; macros: { protein: number; carbs: number; fat: number; calories: number } };
 type UserProfileInput = { displayName?: string; photoURL?: string; goalCalories?: number; macroPercents?: MacroPercents };
-type ProgressEntryInput = { date?: string; weight?: number };
+type ProgressEntryInput = { date?: string; weight?: number; coverIndex?: number };
 
 const sanityConfig: ClientConfig = {
   projectId: process.env.SANITY_PROJECT_ID || process.env.VITE_SANITY_PROJECT_ID || "",
@@ -50,10 +50,7 @@ app.use(express.json());
 const parseProgressUpload = (req: express.Request) =>
   new Promise<{
     fields: Record<string, string>;
-    fileBuffer: Buffer | null;
-    filename?: string;
-    mimeType?: string;
-    size?: number;
+    files: Array<{ buffer: Buffer; filename?: string; mimeType?: string; size: number }>;
   }>((resolve, reject) => {
     const contentType = req.headers["content-type"] || "";
     if (!contentType.includes("multipart/form-data")) {
@@ -62,28 +59,24 @@ const parseProgressUpload = (req: express.Request) =>
     }
     const bb = busboy({
       headers: req.headers,
-      limits: { fileSize: 15 * 1024 * 1024 },
+      limits: { fileSize: 15 * 1024 * 1024, files: 10 },
     });
     const fields: Record<string, string> = {};
-    let fileBuffer: Buffer | null = null;
-    let filename: string | undefined;
-    let mimeType: string | undefined;
-    let size = 0;
-    let fileHandled = false;
+    const files: Array<{ buffer: Buffer; filename?: string; mimeType?: string; size: number }> = [];
 
     bb.on("field", (name, value) => {
       fields[name] = value;
     });
 
     bb.on("file", (fieldname, file, info) => {
-      if (fieldname !== "photo" || fileHandled) {
+      if (fieldname !== "photo" && fieldname !== "photos") {
         file.resume();
         return;
       }
-      fileHandled = true;
-      filename = info?.filename;
-      mimeType = info?.mimeType;
+      const incomingFilename = info?.filename;
+      const incomingMimeType = info?.mimeType;
       const chunks: Buffer[] = [];
+      let size = 0;
       file.on("data", chunk => {
         chunks.push(chunk);
         size += chunk.length;
@@ -92,7 +85,12 @@ const parseProgressUpload = (req: express.Request) =>
         reject(new Error("Photo exceeds 15MB limit."));
       });
       file.on("end", () => {
-        fileBuffer = Buffer.concat(chunks);
+        files.push({
+          buffer: Buffer.concat(chunks),
+          filename: incomingFilename,
+          mimeType: incomingMimeType,
+          size,
+        });
       });
       file.on("error", err => {
         reject(err);
@@ -106,7 +104,7 @@ const parseProgressUpload = (req: express.Request) =>
       reject(err);
     });
     bb.on("close", () => {
-      resolve({ fields, fileBuffer, filename, mimeType, size });
+      resolve({ fields, files });
     });
 
     const rawBody = (req as { rawBody?: Buffer }).rawBody;
@@ -708,7 +706,8 @@ app.get("/progress/entries", requireAuth, async (req, res) => {
       userId,
       date,
       weight,
-      "photoUrl": photo.asset->url
+      "coverUrl": coverPhoto.asset->url,
+      "photoUrls": photos[].asset->url
     }`,
     { userId }
   );
@@ -721,42 +720,53 @@ app.post("/progress/entries", requireAuth, async (req, res) => {
     return jsonError(res, 400, "User email not available.");
   }
   try {
-    const { fields, fileBuffer, filename, mimeType, size } = await parseProgressUpload(req);
-    const { date, weight } = fields as ProgressEntryInput & { weight?: string };
+    const { fields, files } = await parseProgressUpload(req);
+    const { date, weight, coverIndex } = fields as ProgressEntryInput & { weight?: string; coverIndex?: string };
     console.log("[progress] upload start", {
       userId,
       date,
-      hasFile: Boolean(fileBuffer),
-      filename,
-      size,
-      mimetype: mimeType,
+      fileCount: files.length,
+      filenames: files.map(file => file.filename),
     });
-    if (!fileBuffer) {
-      return jsonError(res, 400, "Photo file is required.");
+    if (files.length === 0) {
+      return jsonError(res, 400, "At least one photo is required.");
     }
-    if (!mimeType || !mimeType.startsWith("image/")) {
+    if (files.some(file => !file.mimeType || !file.mimeType.startsWith("image/"))) {
       return jsonError(res, 400, "Only image uploads are supported.");
     }
     const uploadDate = date || new Date().toISOString().slice(0, 10);
     const parsedWeight = weight ? Number(weight) : undefined;
-    const asset = await sanityClient.assets.upload("image", fileBuffer, {
-      filename: filename || "progress-upload",
-      contentType: mimeType,
-    });
-    console.log("[progress] asset upload complete", {
-      userId,
-      assetId: asset._id,
-      assetUrl: asset.url,
-    });
+    const assets = [];
+    for (const file of files) {
+      const asset = await sanityClient.assets.upload("image", file.buffer, {
+        filename: file.filename || "progress-upload",
+        contentType: file.mimeType,
+      });
+      assets.push(asset);
+      console.log("[progress] asset upload complete", {
+        userId,
+        assetId: asset._id,
+        assetUrl: asset.url,
+      });
+    }
+    const coverIndexNumber = Number(coverIndex);
+    const safeCoverIndex = Number.isFinite(coverIndexNumber)
+      ? Math.min(Math.max(coverIndexNumber, 0), assets.length - 1)
+      : 0;
+    const coverAsset = assets[safeCoverIndex];
     const docPayload = {
       _type: "progressEntry",
       userId,
       date: uploadDate,
       weight: Number.isFinite(parsedWeight) ? parsedWeight : null,
-      photo: {
+      coverPhoto: {
+        _type: "image",
+        asset: { _type: "reference", _ref: coverAsset._id },
+      },
+      photos: assets.map(asset => ({
         _type: "image",
         asset: { _type: "reference", _ref: asset._id },
-      },
+      })),
       createdAt: new Date().toISOString(),
     };
     console.log("[progress] creating entry", { userId, date: uploadDate, weight: docPayload.weight });
@@ -767,7 +777,8 @@ app.post("/progress/entries", requireAuth, async (req, res) => {
       userId,
       date: uploadDate,
       weight: Number.isFinite(parsedWeight) ? parsedWeight : null,
-      photoUrl: asset.url,
+      coverUrl: coverAsset.url,
+      photoUrls: assets.map(asset => asset.url),
     });
   } catch (error) {
     console.error("[progress] entry creation failed", { userId, error });

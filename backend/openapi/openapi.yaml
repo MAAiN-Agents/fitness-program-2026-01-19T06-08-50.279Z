@@ -914,9 +914,14 @@ components:
           format: date
         weight:
           type: number
-        photoUrl:
+        coverUrl:
           type: string
           format: uri
+        photoUrls:
+          type: array
+          items:
+            type: string
+            format: uri
         createdAt:
           type: string
           format: date-time
@@ -929,10 +934,15 @@ components:
           format: date
         weight:
           type: number
-        photo:
-          type: string
-          format: binary
-      required: [photo]
+        coverIndex:
+          type: integer
+          minimum: 0
+        photos:
+          type: array
+          items:
+            type: string
+            format: binary
+      required: [photos]
     UserProfileInput:
       type: object
       properties:
