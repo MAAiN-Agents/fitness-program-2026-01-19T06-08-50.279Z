@@ -313,6 +313,24 @@ const affiliatePromotion = defineType({
   ],
 });
 
+const progressEntry = defineType({
+  name: "progressEntry",
+  title: "Progress Entry",
+  type: "document",
+  fields: [
+    defineField({ name: "userId", title: "User ID", type: "string" }),
+    defineField({ name: "date", title: "Date", type: "date" }),
+    defineField({ name: "weight", title: "Weight (lbs)", type: "number" }),
+    defineField({
+      name: "photo",
+      title: "Photo",
+      type: "image",
+      options: { hotspot: true },
+    }),
+    defineField({ name: "createdAt", title: "Created At", type: "datetime" }),
+  ],
+});
+
 const userProfile = defineType({
   name: "userProfile",
   title: "User Profile",
@@ -345,5 +363,6 @@ export const schemaTypes = [
   plan,
   exercise,
   affiliatePromotion,
+  progressEntry,
   userProfile,
 ];

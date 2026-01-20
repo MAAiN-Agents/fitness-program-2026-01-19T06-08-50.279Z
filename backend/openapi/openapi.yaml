@@ -522,6 +522,37 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserProfile'
+  /progress/entries:
+    get:
+      summary: List progress entries for the current user
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Progress entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProgressEntry'
+    post:
+      summary: Create a progress entry
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ProgressEntryInput'
+      responses:
+        '201':
+          description: Progress entry created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressEntry'
 components:
   securitySchemes:
     bearerAuth:
@@ -871,6 +902,37 @@ components:
         macroPercents:
           $ref: '#/components/schemas/MacroPercents'
       required: [id, userId, email]
+    ProgressEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        date:
+          type: string
+          format: date
+        weight:
+          type: number
+        photoUrl:
+          type: string
+          format: uri
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, userId, date]
+    ProgressEntryInput:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        weight:
+          type: number
+        photo:
+          type: string
+          format: binary
+      required: [photo]
     UserProfileInput:
       type: object
       properties:

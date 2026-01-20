@@ -2,6 +2,7 @@ import "dotenv/config";
 import * as functions from "firebase-functions";
 import express from "express";
 import cors from "cors";
+import busboy from "busboy";
 import { createClient, type ClientConfig, type SanityClient } from "@sanity/client";
 import { initializeApp, getApps } from "firebase-admin/app";
 import { getAuth, type DecodedIdToken } from "firebase-admin/auth";
@@ -16,6 +17,7 @@ type NutritionDayInput = { date: string; calories: number; macroPercents: MacroP
 type NutritionDayUpsert = { date: string; patch: { id?: string; date: string; calories: number; macroPercents: MacroPercents; meals: Array<{ id: string; dayId: string; type: string; macros: { protein: number; carbs: number; fat: number; calories: number } }> } };
 type MealInput = { type: string; macros: { protein: number; carbs: number; fat: number; calories: number } };
 type UserProfileInput = { displayName?: string; photoURL?: string; goalCalories?: number; macroPercents?: MacroPercents };
+type ProgressEntryInput = { date?: string; weight?: number };
 
 const sanityConfig: ClientConfig = {
   projectId: process.env.SANITY_PROJECT_ID || process.env.VITE_SANITY_PROJECT_ID || "",
@@ -44,6 +46,76 @@ const corsMiddleware = cors({
 app.options("*", corsMiddleware);
 app.use(corsMiddleware);
 app.use(express.json());
+
+const parseProgressUpload = (req: express.Request) =>
+  new Promise<{
+    fields: Record<string, string>;
+    fileBuffer: Buffer | null;
+    filename?: string;
+    mimeType?: string;
+    size?: number;
+  }>((resolve, reject) => {
+    const contentType = req.headers["content-type"] || "";
+    if (!contentType.includes("multipart/form-data")) {
+      reject(new Error("Upload must be multipart/form-data."));
+      return;
+    }
+    const bb = busboy({
+      headers: req.headers,
+      limits: { fileSize: 15 * 1024 * 1024 },
+    });
+    const fields: Record<string, string> = {};
+    let fileBuffer: Buffer | null = null;
+    let filename: string | undefined;
+    let mimeType: string | undefined;
+    let size = 0;
+    let fileHandled = false;
+
+    bb.on("field", (name, value) => {
+      fields[name] = value;
+    });
+
+    bb.on("file", (fieldname, file, info) => {
+      if (fieldname !== "photo" || fileHandled) {
+        file.resume();
+        return;
+      }
+      fileHandled = true;
+      filename = info?.filename;
+      mimeType = info?.mimeType;
+      const chunks: Buffer[] = [];
+      file.on("data", chunk => {
+        chunks.push(chunk);
+        size += chunk.length;
+      });
+      file.on("limit", () => {
+        reject(new Error("Photo exceeds 15MB limit."));
+      });
+      file.on("end", () => {
+        fileBuffer = Buffer.concat(chunks);
+      });
+      file.on("error", err => {
+        reject(err);
+      });
+    });
+
+    bb.on("filesLimit", () => {
+      reject(new Error("Too many files."));
+    });
+    bb.on("error", err => {
+      reject(err);
+    });
+    bb.on("close", () => {
+      resolve({ fields, fileBuffer, filename, mimeType, size });
+    });
+
+    const rawBody = (req as { rawBody?: Buffer }).rawBody;
+    if (rawBody) {
+      bb.end(rawBody);
+    } else {
+      req.pipe(bb);
+    }
+  });
 
 type AuthenticatedRequest = express.Request & { user?: DecodedIdToken };
 
@@ -623,6 +695,91 @@ app.post("/users/me", requireAuth, async (req, res) => {
     goalCalories: nextGoalCalories,
     macroPercents: nextMacroPercents,
   });
+});
+
+app.get("/progress/entries", requireAuth, async (req, res) => {
+  const userId = getUserId(req);
+  if (!userId) {
+    return jsonError(res, 400, "User email not available.");
+  }
+  const entries = await sanityClient.fetch(
+    `*[_type == "progressEntry" && userId == $userId] | order(date desc){
+      "id": _id,
+      userId,
+      date,
+      weight,
+      "photoUrl": photo.asset->url
+    }`,
+    { userId }
+  );
+  return res.status(200).json(entries || []);
+});
+
+app.post("/progress/entries", requireAuth, async (req, res) => {
+  const userId = getUserId(req);
+  if (!userId) {
+    return jsonError(res, 400, "User email not available.");
+  }
+  try {
+    const { fields, fileBuffer, filename, mimeType, size } = await parseProgressUpload(req);
+    const { date, weight } = fields as ProgressEntryInput & { weight?: string };
+    console.log("[progress] upload start", {
+      userId,
+      date,
+      hasFile: Boolean(fileBuffer),
+      filename,
+      size,
+      mimetype: mimeType,
+    });
+    if (!fileBuffer) {
+      return jsonError(res, 400, "Photo file is required.");
+    }
+    if (!mimeType || !mimeType.startsWith("image/")) {
+      return jsonError(res, 400, "Only image uploads are supported.");
+    }
+    const uploadDate = date || new Date().toISOString().slice(0, 10);
+    const parsedWeight = weight ? Number(weight) : undefined;
+    const asset = await sanityClient.assets.upload("image", fileBuffer, {
+      filename: filename || "progress-upload",
+      contentType: mimeType,
+    });
+    console.log("[progress] asset upload complete", {
+      userId,
+      assetId: asset._id,
+      assetUrl: asset.url,
+    });
+    const docPayload = {
+      _type: "progressEntry",
+      userId,
+      date: uploadDate,
+      weight: Number.isFinite(parsedWeight) ? parsedWeight : null,
+      photo: {
+        _type: "image",
+        asset: { _type: "reference", _ref: asset._id },
+      },
+      createdAt: new Date().toISOString(),
+    };
+    console.log("[progress] creating entry", { userId, date: uploadDate, weight: docPayload.weight });
+    const doc = await sanityClient.create(docPayload);
+    console.log("[progress] entry created", { userId, entryId: doc._id });
+    return res.status(201).json({
+      id: doc._id,
+      userId,
+      date: uploadDate,
+      weight: Number.isFinite(parsedWeight) ? parsedWeight : null,
+      photoUrl: asset.url,
+    });
+  } catch (error) {
+    console.error("[progress] entry creation failed", { userId, error });
+    if (error instanceof Error) {
+      if (error.message === "Upload must be multipart/form-data."
+        || error.message === "Photo exceeds 15MB limit."
+        || error.message === "Too many files.") {
+        return jsonError(res, 400, error.message);
+      }
+    }
+    return jsonError(res, 500, "Unable to create progress entry.");
+  }
 });
 
 const firebaseHandler = (request: express.Request, response: express.Response) =>

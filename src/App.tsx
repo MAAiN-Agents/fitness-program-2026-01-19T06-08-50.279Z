@@ -8,6 +8,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createClient } from "@sanity/client";
 import styled, { createGlobalStyle, css } from "styled-components";
 import { useFirebaseAuth } from "./auth/FirebaseAuthContext";
+import FitnessProgressTab, { type ProgressEntry } from "./components/tabs/FitnessProgressTab";
 
 const GA_ID = "G-EXCXY8B3LX";
 
@@ -371,6 +372,20 @@ const ProfileAvatar = styled.div.attrs(dataComponent('ProfileAvatar'))`
     width: 100%;
     height: 100%;
     object-fit: cover;
+  }
+`;
+const ProfileSummaryButton = styled.button.attrs(dataComponent('ProfileSummaryButton'))`
+  width: 100%;
+  text-align: left;
+  background: ${theme.colors.card};
+  border-radius: ${theme.radii.card};
+  border: 1px solid ${theme.colors.border};
+  box-shadow: ${theme.shadow.card};
+  padding: ${theme.spacing.md};
+  cursor: pointer;
+  display: block;
+  &:hover, &:focus {
+    outline: 2px solid ${theme.colors.accent};
   }
 `;
 const ProfileMenuLabel = styled.span.attrs(dataComponent('ProfileMenuLabel'))`
@@ -1049,6 +1064,13 @@ const PromoIcon = () => (
     <circle cx="10" cy="10" r="1.5" />
   </SvgIcon>
 );
+const ProgressIcon = () => (
+  <SvgIcon viewBox="0 0 24 24" aria-hidden="true">
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <circle cx="9" cy="10" r="2" />
+    <path d="M21 17l-5-5-4 4-2-2-4 4" />
+  </SvgIcon>
+);
 const PlusIcon = () => (
   <SvgIcon viewBox="0 0 24 24" aria-hidden="true">
     <path d="M12 5v14" />
@@ -1295,6 +1317,31 @@ function useAPI(getIdToken?: () => Promise<string | null>) {
         }
         return response.json();
       }),
+    getProgressEntries: () =>
+      run(async () => {
+        const authHeaders = await getAuthHeaders();
+        const response = await fetch(`${baseUrl}/progress/entries`, {
+          method: "GET",
+          headers: { ...authHeaders },
+        });
+        if (!response.ok) {
+          throw new Error(`Progress fetch failed with status ${response.status}`);
+        }
+        return response.json();
+      }),
+    createProgressEntry: (formData: FormData) =>
+      run(async () => {
+        const authHeaders = await getAuthHeaders();
+        const response = await fetch(`${baseUrl}/progress/entries`, {
+          method: "POST",
+          headers: { ...authHeaders },
+          body: formData,
+        });
+        if (!response.ok) {
+          throw new Error(`Progress upload failed with status ${response.status}`);
+        }
+        return response.json();
+      }),
   };
 }
 
@@ -1411,7 +1458,7 @@ function App() {
   } | null>(null);
 
   // Navigation state
-  const [tab, setTab] = useState(0); // 0:Tracker, 1:Nutrition, 2:Plans, 3:Library, 4:Promo
+  const [tab, setTab] = useState(0); // 0:Tracker, 1:Nutrition, 2:Plans, 3:Library, 4:Promo, 5:Progress
 
   // Tracker state
   const [weeks, setWeeks] = useState<Week[]>([]);
@@ -1447,6 +1494,8 @@ function App() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [exerciseLibrary, setExerciseLibrary] = useState<Exercise[]>([]);
   const [affiliatePromotions, setAffiliatePromotions] = useState<AffiliatePromotion[]>([]);
+  const [progressEntries, setProgressEntries] = useState<ProgressEntry[]>([]);
+  const [progressLoading, setProgressLoading] = useState(false);
   const exerciseById = useMemo<Record<string, Exercise>>(
     () => Object.fromEntries(exerciseLibrary.map(ex => [ex.id, ex])),
     [exerciseLibrary]
@@ -1462,6 +1511,17 @@ function App() {
       }
     }
     return weekData;
+  };
+
+  const refreshProgressEntries = async (): Promise<ProgressEntry[] | null> => {
+    if (!isAuthed) return null;
+    setProgressLoading(true);
+    const progressData = await api.getProgressEntries();
+    if (progressData) {
+      setProgressEntries(progressData as ProgressEntry[]);
+    }
+    setProgressLoading(false);
+    return progressData as ProgressEntry[] | null;
   };
 
   const refreshNutritionDays = async (): Promise<NutritionDay[] | null> => {
@@ -1514,6 +1574,7 @@ function App() {
     if (!isAuthed) {
       setWeeks([]);
       setNutritionDays([]);
+      setProgressEntries([]);
       setSelectedWeek("");
       setInjectWeekLabel("Week 1");
       setUserProfile(null);
@@ -1536,6 +1597,7 @@ function App() {
         setCalendarMonth(parseDate(nutritionData[0].date));
       }
       setInjectWeekLabel(`Week ${(weekData || []).length + 1}`);
+      refreshProgressEntries();
     });
     return () => {
       active = false;
@@ -1753,6 +1815,23 @@ function App() {
     }
   };
 
+  const handleProgressUpload = async (payload: { date: string; weight: string; file: File }) => {
+    if (!isAuthed) {
+      setAuthError("Sign in to upload progress.");
+      return;
+    }
+    setProgressLoading(true);
+    const formData = new FormData();
+    formData.append("date", payload.date);
+    if (payload.weight) {
+      formData.append("weight", payload.weight);
+    }
+    formData.append("photo", payload.file, payload.file.name);
+    await api.createProgressEntry(formData);
+    await refreshProgressEntries();
+    setProgressLoading(false);
+  };
+
   const handleProfileCaloriesDigit = (digit: string) => {
     setProfileCaloriesPad(prev => {
       if (prev === null) return prev;
@@ -1877,6 +1956,7 @@ function App() {
               { label: "Plans", index: 2 },
               { label: "Library", index: 3 },
               { label: "Promo", index: 4 },
+              { label: "Progress", index: 5 },
             ].map(item => (
               <DrawerTabButton
                 key={item.label}
@@ -1909,7 +1989,13 @@ function App() {
           <DrawerTitle>Profile</DrawerTitle>
           {isAuthed ? (
             <>
-              <Card data-component="ProfileSummaryCard">
+              <ProfileSummaryButton
+                data-component="ProfileSummaryCard"
+                onClick={() => {
+                  setTab(5);
+                  setProfileOpen(false);
+                }}
+              >
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <ProfileAvatar>
                     {profilePhoto ? <img src={profilePhoto} alt={profileLabel} /> : profileInitials}
@@ -1921,7 +2007,7 @@ function App() {
                     )}
                   </div>
                 </div>
-              </Card>
+              </ProfileSummaryButton>
               <ProfileFormRow>
                 <Button onClick={() => setProfileDetailsOpen(prev => !prev)}>
                   {profileDetailsOpen ? "Hide profile details" : "Edit profile"}
@@ -2982,6 +3068,28 @@ function App() {
     );
   }
 
+  function renderProgress() {
+    if (authLoading) {
+      return (
+        <Section data-component="FitnessProgress">
+          <SectionTitle>Fitness Progress</SectionTitle>
+          <Card data-component="AuthLoadingCard">Checking sign-in status...</Card>
+        </Section>
+      );
+    }
+    if (!isAuthed) {
+      return renderAuthGate("Fitness Progress", "Sign in to track your progress photos and weigh-ins.");
+    }
+    return (
+      <FitnessProgressTab
+        theme={theme}
+        entries={progressEntries}
+        loading={progressLoading || api.loading}
+        onUpload={handleProgressUpload}
+      />
+    );
+  }
+
   // ---- Plans Section ----
   function renderPlans() {
     const plansForCategory = plans.filter(p => p.category === planCategory);
@@ -3427,6 +3535,7 @@ function App() {
           <NavTab active={tab === 2} onClick={() => setTab(2)} aria-label="Plans">Plans</NavTab>
           <NavTab active={tab === 3} onClick={() => setTab(3)} aria-label="Library">Library</NavTab>
           <NavTab active={tab === 4} onClick={() => setTab(4)} aria-label="Promo">Promo</NavTab>
+          <NavTab active={tab === 5} onClick={() => setTab(5)} aria-label="Progress">Progress</NavTab>
         </AppNav>
         <ProfileMenuButton onClick={() => setProfileOpen(true)} aria-label="Open profile menu">
           <ProfileAvatar>
@@ -3446,6 +3555,7 @@ function App() {
         {tab === 2 && renderPlans()}
         {tab === 3 && renderExerciseLibrary()}
         {tab === 4 && renderAffiliatePromotion()}
+        {tab === 5 && renderProgress()}
       </Main>
       {calendarOpen && renderCalendarDrawer()}
       {profileOpen && renderProfileDrawer()}
@@ -3469,6 +3579,10 @@ function App() {
         <BottomNavTab active={tab === 4} onClick={() => setTab(4)} aria-label="Promo">
           <IconWrapper><PromoIcon /></IconWrapper>
           Promo
+        </BottomNavTab>
+        <BottomNavTab active={tab === 5} onClick={() => setTab(5)} aria-label="Progress">
+          <IconWrapper><ProgressIcon /></IconWrapper>
+          Progress
         </BottomNavTab>
       </BottomNav>
     </>
