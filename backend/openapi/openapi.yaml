@@ -491,12 +491,50 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AffiliatePromotion'
+  /users/me:
+    get:
+      summary: Get current user profile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '404':
+          description: User profile not found
+    post:
+      summary: Create or update current user profile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserProfileInput'
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   schemas:
     Week:
       type: object
       properties:
         id:
+          type: string
+        userId:
           type: string
         sessions:
           type: array
@@ -510,7 +548,7 @@ components:
           format: date
         label:
           type: string
-      required: [id, sessions, startDate, endDate, label]
+      required: [id, userId, sessions, startDate, endDate, label]
     WeekInput:
       type: object
       properties:
@@ -528,6 +566,8 @@ components:
       properties:
         id:
           type: string
+        userId:
+          type: string
         day:
           type: string
           enum: [Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday]
@@ -540,7 +580,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ExerciseEntry'
-      required: [id, day, time, label, entries]
+      required: [id, userId, day, time, label, entries]
     SessionInput:
       type: object
       properties:
@@ -558,13 +598,15 @@ components:
       properties:
         id:
           type: string
+        userId:
+          type: string
         exerciseId:
           type: string
         sets:
           type: array
           items:
             $ref: '#/components/schemas/SetEntry'
-      required: [id, exerciseId, sets]
+      required: [id, userId, exerciseId, sets]
     ExerciseEntryInput:
       type: object
       properties:
@@ -601,6 +643,8 @@ components:
       properties:
         id:
           type: string
+        userId:
+          type: string
         date:
           type: string
           format: date
@@ -612,7 +656,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Meal'
-      required: [id, date, calories, macroPercents, meals]
+      required: [id, userId, date, calories, macroPercents, meals]
     NutritionDayInput:
       type: object
       properties:
@@ -631,8 +675,36 @@ components:
           type: string
           format: date
         patch:
-          $ref: '#/components/schemas/NutritionDay'
+          $ref: '#/components/schemas/NutritionDayPatch'
       required: [date, patch]
+    NutritionDayPatch:
+      type: object
+      properties:
+        id:
+          type: string
+        date:
+          type: string
+          format: date
+        calories:
+          type: number
+        macroPercents:
+          $ref: '#/components/schemas/MacroPercents'
+        meals:
+          type: array
+          items:
+            $ref: '#/components/schemas/MealPatch'
+    MealPatch:
+      type: object
+      properties:
+        id:
+          type: string
+        dayId:
+          type: string
+        type:
+          type: string
+          enum: [Breakfast, Lunch, Dinner, Snack]
+        macros:
+          $ref: '#/components/schemas/MacroGoals'
     MacroPercents:
       type: object
       properties:
@@ -660,6 +732,8 @@ components:
       properties:
         id:
           type: string
+        userId:
+          type: string
         dayId:
           type: string
         type:
@@ -667,7 +741,7 @@ components:
           enum: [Breakfast, Lunch, Dinner, Snack]
         macros:
           $ref: '#/components/schemas/MacroGoals'
-      required: [id, dayId, type, macros]
+      required: [id, userId, dayId, type, macros]
     MealInput:
       type: object
       properties:
@@ -773,3 +847,26 @@ components:
         copy:
           type: string
       required: [cta, url, qrCodeUrl, disclosure, copy]
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        email:
+          type: string
+          format: email
+        displayName:
+          type: string
+        photoURL:
+          type: string
+          format: uri
+      required: [id, userId, email]
+    UserProfileInput:
+      type: object
+      properties:
+        displayName:
+          type: string
+        photoURL:
+          type: string

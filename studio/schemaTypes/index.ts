@@ -38,6 +38,7 @@ const exerciseEntry = defineType({
   title: "Exercise Entry",
   type: "document",
   fields: [
+    defineField({ name: "userId", title: "User ID", type: "string" }),
     defineField({
       name: "sessionId",
       title: "Session",
@@ -64,6 +65,7 @@ const session = defineType({
   title: "Session",
   type: "document",
   fields: [
+    defineField({ name: "userId", title: "User ID", type: "string" }),
     defineField({
       name: "day",
       title: "Day",
@@ -100,6 +102,7 @@ const week = defineType({
   title: "Week",
   type: "document",
   fields: [
+    defineField({ name: "userId", title: "User ID", type: "string" }),
     defineField({ name: "startDate", title: "Start Date", type: "date" }),
     defineField({ name: "endDate", title: "End Date", type: "date" }),
     defineField({ name: "label", title: "Label", type: "string" }),
@@ -140,6 +143,7 @@ const nutritionDay = defineType({
   title: "Nutrition Day",
   type: "document",
   fields: [
+    defineField({ name: "userId", title: "User ID", type: "string" }),
     defineField({ name: "date", title: "Date", type: "date" }),
     defineField({ name: "macroGoals", title: "Macro Goals", type: "macroGoals" }),
     defineField({ name: "macroPercents", title: "Macro Percents", type: "macroPercents" }),
@@ -151,6 +155,7 @@ const meal = defineType({
   title: "Meal",
   type: "document",
   fields: [
+    defineField({ name: "userId", title: "User ID", type: "string" }),
     defineField({
       name: "dayId",
       title: "Nutrition Day",
@@ -306,6 +311,20 @@ const affiliatePromotion = defineType({
   ],
 });
 
+const userProfile = defineType({
+  name: "userProfile",
+  title: "User Profile",
+  type: "document",
+  fields: [
+    defineField({ name: "userId", title: "User ID", type: "string" }),
+    defineField({ name: "email", title: "Email", type: "string" }),
+    defineField({ name: "displayName", title: "Display Name", type: "string" }),
+    defineField({ name: "photoURL", title: "Photo URL", type: "url" }),
+    defineField({ name: "createdAt", title: "Created At", type: "datetime" }),
+    defineField({ name: "updatedAt", title: "Updated At", type: "datetime" }),
+  ],
+});
+
 export const schemaTypes = [
   duration,
   setEntry,
@@ -322,4 +341,5 @@ export const schemaTypes = [
   plan,
   exercise,
   affiliatePromotion,
+  userProfile,
 ];

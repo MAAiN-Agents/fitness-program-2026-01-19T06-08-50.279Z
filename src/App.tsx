@@ -18,8 +18,8 @@ const sanityClient = createClient({
   apiVersion: process.env.REACT_APP_SANITY_API_VERSION || "2024-01-01",
   useCdn: true,
 });
-const sanityFetch = <T,>(query: string): Promise<T> =>
-  (sanityClient as { fetch: (q: string) => Promise<T> }).fetch(query);
+const sanityFetch = <T,>(query: string, params?: Record<string, unknown>): Promise<T> =>
+  (sanityClient as { fetch: (q: string, p?: Record<string, unknown>) => Promise<T> }).fetch(query, params);
 
 // ---- THEME TOKENS ----
 const theme = {
@@ -104,12 +104,14 @@ type ExerciseSet = {
 };
 type ExerciseEntry = {
   id: string;
+  userId?: string;
   sessionId: string;
   exerciseId: string;
   sets: ExerciseSet[];
 };
 type Session = {
   id: string;
+  userId?: string;
   day: string;
   time: string;
   label: string;
@@ -117,6 +119,7 @@ type Session = {
 };
 type Week = {
   id: string;
+  userId?: string;
   startDate: string;
   endDate: string;
   label: string;
@@ -124,12 +127,14 @@ type Week = {
 };
 type Meal = {
   id: string;
+  userId?: string;
   dayId: string;
   type: string;
   macros: { protein: number; carbs: number; fat: number; calories: number };
 };
 type NutritionDay = {
   id: string;
+  userId?: string;
   date: string;
   calories: number;
   macroPercents: MacroPercents;
@@ -171,6 +176,13 @@ type AffiliatePromotion = {
   qrCodeUrl: string;
   disclosure: string;
   copy: string;
+};
+type UserProfile = {
+  id: string;
+  userId: string;
+  email: string;
+  displayName?: string;
+  photoURL?: string;
 };
 type SessionModalState = {
   session: Session | null;
@@ -833,32 +845,37 @@ const PromoIcon = () => (
   </SvgIcon>
 );
 
-async function fetchWeeks(): Promise<Week[]> {
+async function fetchWeeks(userId: string): Promise<Week[]> {
   return sanityFetch(
-    `*[_type == "week"]{
+    `*[_type == "week" && userId == $userId]{
       "id": _id,
+      userId,
       startDate,
       endDate,
       label,
       "sessions": sessions[]->{
         "id": _id,
+        userId,
         day,
         time,
         label,
-        "entries": *[_type == "exerciseEntry" && sessionId._ref == ^._id]{
+        "entries": *[_type == "exerciseEntry" && userId == $userId && sessionId._ref == ^._id]{
           "id": _id,
+          userId,
           "exerciseId": exerciseId._ref,
           sets
         }
       }
-    }`
+    }`,
+    { userId }
   );
 }
 
-async function fetchNutritionDays(): Promise<NutritionDay[]> {
+async function fetchNutritionDays(userId: string): Promise<NutritionDay[]> {
   return sanityFetch(
-    `*[_type == "nutritionDay"]{
+    `*[_type == "nutritionDay" && userId == $userId]{
       "id": _id,
+      userId,
       date,
       "calories": macroGoals.calories,
       "macroPercents": {
@@ -866,12 +883,14 @@ async function fetchNutritionDays(): Promise<NutritionDay[]> {
         "carbs": macroPercents.carbs,
         "fat": macroPercents.fat
       },
-      "meals": *[_type == "meal" && dayId._ref == ^._id]{
+      "meals": *[_type == "meal" && userId == $userId && dayId._ref == ^._id]{
         "id": _id,
+        userId,
         type,
         macros
       }
-    }`
+    }`,
+    { userId }
   );
 }
 
@@ -924,7 +943,7 @@ async function fetchAffiliatePromotions(): Promise<AffiliatePromotion[]> {
   );
 }
 
-function useCMS() {
+function useCMS(userId?: string) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<unknown | null>(null);
 
@@ -944,8 +963,8 @@ function useCMS() {
   return {
     loading,
     error,
-    getWeeks: () => run(fetchWeeks),
-    getNutritionDays: () => run(fetchNutritionDays),
+    getWeeks: () => (userId ? run(() => fetchWeeks(userId)) : Promise.resolve([] as Week[])),
+    getNutritionDays: () => (userId ? run(() => fetchNutritionDays(userId)) : Promise.resolve([] as NutritionDay[])),
     getPlans: () => run(fetchPlans),
     getExercises: () => run(fetchExercises),
     getAffiliatePromotions: () => run(fetchAffiliatePromotions),
@@ -978,6 +997,34 @@ function useAPI(getIdToken?: () => Promise<string | null>) {
   return {
     loading,
     error,
+    getUserProfile: () =>
+      run(async () => {
+        const authHeaders = await getAuthHeaders();
+        const response = await fetch(`${baseUrl}/users/me`, {
+          method: "GET",
+          headers: { ...authHeaders },
+        });
+        if (!response.ok) {
+          if (response.status === 404) {
+            return null;
+          }
+          throw new Error(`Profile fetch failed with status ${response.status}`);
+        }
+        return response.json();
+      }),
+    upsertUserProfile: (profile: { displayName?: string; photoURL?: string }) =>
+      run(async () => {
+        const authHeaders = await getAuthHeaders();
+        const response = await fetch(`${baseUrl}/users/me`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders },
+          body: JSON.stringify(profile),
+        });
+        if (!response.ok) {
+          throw new Error(`Profile update failed with status ${response.status}`);
+        }
+        return response.json();
+      }),
     upsertNutritionDay: ({ date, patch }: UpsertNutritionPayload) =>
       run(async () => {
         const authHeaders = await getAuthHeaders();
@@ -1088,11 +1135,12 @@ function roundToTenth(value: number): number {
 
 // ---- APP ----
 function App() {
-  const cms = useCMS();
   const { user, loading: authLoading, signInWithGoogle, signOut, hasConfig, getIdToken } = useFirebaseAuth();
+  const cms = useCMS(user?.email || "");
   const api = useAPI(getIdToken);
   const [authError, setAuthError] = useState<string | null>(null);
   const isAuthed = Boolean(user);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
   // Navigation state
   const [tab, setTab] = useState(0); // 0:Tracker, 1:Nutrition, 2:Plans, 3:Library, 4:Promo
@@ -1199,6 +1247,7 @@ function App() {
       setNutritionDays([]);
       setSelectedWeek("");
       setInjectWeekLabel("Week 1");
+      setUserProfile(null);
       return () => {
         active = false;
       };
@@ -1223,6 +1272,33 @@ function App() {
       active = false;
     };
   }, [isAuthed]);
+
+  useEffect(() => {
+    let active = true;
+    if (!isAuthed || !user) {
+      return () => {
+        active = false;
+      };
+    }
+    api
+      .upsertUserProfile({
+        displayName: user.displayName || undefined,
+        photoURL: user.photoURL || undefined,
+      })
+      .then(profile => {
+        if (!active) return;
+        if (profile) {
+          setUserProfile(profile as UserProfile);
+        }
+      })
+      .catch(() => {
+        if (!active) return;
+        setAuthError("Unable to sync user profile.");
+      });
+    return () => {
+      active = false;
+    };
+  }, [isAuthed, user]);
 
   const nutritionDates = new Set(nutritionDays.map(d => d.date));
   const sortedNutritionDates = [...nutritionDays]
@@ -2456,7 +2532,9 @@ function App() {
         <AuthControls>
           {isAuthed ? (
             <>
-              <AuthBadge>{user?.displayName || user?.email || "Signed in"}</AuthBadge>
+              <AuthBadge title={userProfile?.email || user?.email || "Signed in"}>
+                {userProfile?.email || user?.email || userProfile?.displayName || user?.displayName || "Signed in"}
+              </AuthBadge>
               <AuthButton variant="secondary" onClick={handleSignOut}>Sign out</AuthButton>
             </>
           ) : (
