@@ -791,6 +791,60 @@ const WeekTableDayCell = styled.td.attrs(dataComponent('WeekTableDayCell'))`
   font-weight: 700;
   color: ${theme.colors.primary};
 `;
+const WeekDayButton = styled.button.attrs(dataComponent('WeekDayButton'))`
+  width: 100%;
+  display: grid;
+  gap: 2px;
+  padding: 0;
+  background: none;
+  border: none;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  &:hover, &:focus {
+    outline: 2px solid ${theme.colors.accent};
+    border-radius: ${theme.radii.input};
+  }
+`;
+const DailyModal = styled(PlanModal).attrs(dataComponent('DailyModal'))`
+  max-width: 520px;
+`;
+const DailyModalHeader = styled.div.attrs(dataComponent('DailyModalHeader'))`
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: ${theme.colors.card};
+  padding-bottom: ${theme.spacing.sm};
+  border-bottom: 1px solid ${theme.colors.border};
+`;
+const DailyModalBody = styled(PlanModalBody).attrs(dataComponent('DailyModalBody'))`
+  margin-top: ${theme.spacing.sm};
+`;
+const DailyTimeHeader = styled.button.attrs(dataComponent('DailyTimeHeader'))`
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: ${theme.spacing.sm};
+  padding: ${theme.spacing.sm} 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: ${theme.colors.primary};
+  font: ${theme.font.button};
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  &:hover, &:focus {
+    outline: 2px solid ${theme.colors.accent};
+    border-radius: ${theme.radii.input};
+  }
+`;
+const DailyTimeCount = styled.span.attrs(dataComponent('DailyTimeCount'))`
+  font-size: 0.7rem;
+  color: ${theme.colors.textSecondary};
+  font-weight: 600;
+`;
 const MacroSummary = styled.div.attrs(dataComponent('MacroSummary'))`
   display: flex;
   flex-direction: column;
@@ -1364,6 +1418,7 @@ function App() {
   const [selectedWeek, setSelectedWeek] = useState("");
   const [sessionModal, setSessionModal] = useState<SessionModalState | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [dailyModal, setDailyModal] = useState<{ day: string; date: Date } | null>(null);
 
   // Nutrition state
   const [nutritionDays, setNutritionDays] = useState<NutritionDay[]>([]);
@@ -1546,6 +1601,13 @@ function App() {
     start: parseDate(week.startDate),
     end: parseDate(week.endDate),
   }));
+  const findWeekForDate = (date: Date) =>
+    weeks.find(week => {
+      const start = parseDate(week.startDate);
+      const end = parseDate(week.endDate);
+      return date >= start && date <= end;
+    });
+  const getDayLabelForDate = (date: Date) => daysOfWeek[(date.getDay() + 6) % 7];
   const monthStart = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
   const monthLabel = monthStart.toLocaleDateString("en-US", { month: "long", year: "numeric" });
   const startOffset = (monthStart.getDay() + 6) % 7;
@@ -1592,6 +1654,21 @@ function App() {
   const handleSelectDate = (dateKey: string) => {
     setSelectedDate(dateKey);
     setCalendarMonth(parseDate(dateKey));
+  };
+  const handleCalendarDaySelect = (date: Date, close?: () => void) => {
+    const dateKey = formatDate(date);
+    handleSelectDate(dateKey);
+    const matchingWeek = findWeekForDate(date);
+    if (matchingWeek && isAuthed) {
+      setSelectedWeek(matchingWeek.id);
+      setDailyModal({ day: getDayLabelForDate(date), date });
+      setTab(0);
+      setProfileOpen(false);
+      setCalendarOpen(false);
+    }
+    if (close) {
+      close();
+    }
   };
   const getAdjacentNutritionDates = (dateKey: string) => {
     if (sortedNutritionDates.length === 0) {
@@ -1753,10 +1830,7 @@ function App() {
               $hasWorkout={hasWorkout}
               $isSelected={isSelected}
               onClick={() => {
-                handleSelectDate(dateKey);
-                if (onClose) {
-                  onClose();
-                }
+                handleCalendarDaySelect(date, onClose);
               }}
             >
               {date.getDate()}
@@ -1991,7 +2065,7 @@ function App() {
     }
     return (
       <Section data-component="FitnessTracker">
-        <SectionTitle>Fitness Tracker</SectionTitle>
+        <SectionTitle>{parseDate(week.startDate).getFullYear()} Fitness Tracker</SectionTitle>
         <div style={{ fontSize: 12, color: theme.colors.textSecondary, marginBottom: 8 }}>
           Covering {formatReadableDate(parseDate(week.startDate))} - {formatReadableDate(parseDate(week.endDate))}
         </div>
@@ -2020,10 +2094,20 @@ function App() {
               </tr>
             </thead>
             <tbody>
-              {daysOfWeek.map(day => (
+              {daysOfWeek.map((day, index) => {
+                const dayDate = addDays(parseDate(week.startDate), index);
+                const dayLabel = dayDate.toLocaleDateString("en-US", { month: "short", day: "2-digit" });
+                return (
                 <tr key={day} data-component="WeekTableRow">
-                  <WeekTableDayCell>{day}</WeekTableDayCell>
-        {sessionTimes.map(time => {
+                  <WeekTableDayCell>
+                    <WeekDayButton onClick={() => setDailyModal({ day, date: dayDate })}>
+                      <span>{day}</span>
+                      <span style={{ fontSize: 12, color: theme.colors.textSecondary, marginTop: 2 }}>
+                        {dayLabel}
+                      </span>
+                    </WeekDayButton>
+                  </WeekTableDayCell>
+                {sessionTimes.map(time => {
                     const sessions = (week.sessions || []).filter(s => s.day === day && s.time === time);
                     return (
                       <td key={time} data-component="WeekTableSessionCell">
@@ -2054,7 +2138,8 @@ function App() {
                     );
                   })}
                 </tr>
-              ))}
+              );
+              })}
             </tbody>
           </WeekTable>
         </Card>
@@ -2066,11 +2151,97 @@ function App() {
             onClose={() => setSessionModal(null)}
           />
         )}
+        {dailyModal && (
+          <DailyViewModal
+            week={week}
+            day={dailyModal.day}
+            date={dailyModal.date}
+            onClose={() => setDailyModal(null)}
+          />
+        )}
       </Section>
     );
   }
 
   // ---- Session Modal ----
+  function DailyViewModal({
+    week,
+    day,
+    date,
+    onClose,
+  }: {
+    week: Week;
+    day: string;
+    date: Date;
+    onClose: () => void;
+  }) {
+    const [collapsed, setCollapsed] = useState({ am: false, pm: false });
+    const daySessions = (week.sessions || []).filter(session => session.day === day);
+    const sessionsByTime = {
+      AM: daySessions.filter(session => session.time === "AM"),
+      PM: daySessions.filter(session => session.time === "PM"),
+    };
+    const openSession = (session: Session | null, time: "AM" | "PM") => {
+      onClose();
+      setSessionModal({ session, day, time });
+    };
+    return (
+      <ModalOverlay onClick={onClose}>
+        <DailyModal onClick={e => e.stopPropagation()}>
+          <DailyModalHeader>
+            <SectionTitle>{day}</SectionTitle>
+            <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>
+              {date.toLocaleDateString("en-US", { month: "short", day: "2-digit" })}
+            </div>
+          </DailyModalHeader>
+          <DailyModalBody>
+            {(["AM", "PM"] as const).map(time => {
+              const timeKey = time.toLowerCase() as "am" | "pm";
+              const isCollapsed = collapsed[timeKey];
+              const sessions = sessionsByTime[time];
+              return (
+                <div key={time} style={{ marginBottom: theme.spacing.md }}>
+                  <DailyTimeHeader onClick={() => setCollapsed(prev => ({ ...prev, [timeKey]: !prev[timeKey] }))}>
+                    <span>{time}</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <DailyTimeCount>{sessions.length} session{sessions.length === 1 ? "" : "s"}</DailyTimeCount>
+                      {isCollapsed ? <PlusIcon /> : <MinusIcon />}
+                    </div>
+                  </DailyTimeHeader>
+                  {!isCollapsed && (
+                    <>
+                      {sessions.length === 0 && (
+                        <Card data-component="DailyEmptySessionCard">
+                          No {time} sessions yet.
+                        </Card>
+                      )}
+                      {sessions.map(session => (
+                        <PlanSessionRow key={session.id}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                            <div>
+                              <PlanSessionLabel>{stripSessionTime(session.label) || session.label}</PlanSessionLabel>
+                              <PlanExerciseMeta>{session.entries.length} exercises</PlanExerciseMeta>
+                            </div>
+                            <Button variant="secondary" onClick={() => openSession(session, time)}>
+                              Edit
+                            </Button>
+                          </div>
+                        </PlanSessionRow>
+                      ))}
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </DailyModalBody>
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <Button variant="secondary" onClick={onClose}>Close</Button>
+          </div>
+        </DailyModal>
+      </ModalOverlay>
+    );
+  }
+
   function SessionModal({
     session,
     day,
@@ -2224,6 +2395,9 @@ function App() {
           <SectionTitle>
             {day} {time} Session
           </SectionTitle>
+          <div style={{ fontSize: 12, color: theme.colors.textSecondary, marginBottom: 12 }}>
+            {session ? stripSessionTime(session.label) || session.label : "New session"}
+          </div>
           {session ? (
             <>
               <div style={{ marginBottom: 16 }}>
