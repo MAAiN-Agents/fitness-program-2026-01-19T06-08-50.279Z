@@ -626,6 +626,10 @@ components:
           type: integer
         rpe:
           type: number
+        actualReps:
+          type: number
+        actualDuration:
+          type: number
         duration:
           $ref: '#/components/schemas/Duration'
       required: []
@@ -862,6 +866,10 @@ components:
         photoURL:
           type: string
           format: uri
+        goalCalories:
+          type: number
+        macroPercents:
+          $ref: '#/components/schemas/MacroPercents'
       required: [id, userId, email]
     UserProfileInput:
       type: object
@@ -870,3 +878,7 @@ components:
           type: string
         photoURL:
           type: string
+        goalCalories:
+          type: number
+        macroPercents:
+          $ref: '#/components/schemas/MacroPercents'

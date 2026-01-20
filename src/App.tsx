@@ -99,7 +99,9 @@ type MacroPercents = { protein: number; carbs: number; fat: number };
 type ExerciseSet = {
   weight: number;
   reps: number;
-  rpe: number;
+  rpe?: number;
+  actualReps?: number;
+  actualDuration?: number;
   duration?: { value: number; unit: string };
 };
 type ExerciseEntry = {
@@ -183,6 +185,8 @@ type UserProfile = {
   email: string;
   displayName?: string;
   photoURL?: string;
+  goalCalories?: number;
+  macroPercents?: MacroPercents;
 };
 type SessionModalState = {
   session: Session | null;
@@ -282,21 +286,6 @@ const AppNav = styled.nav.attrs(dataComponent('AppNav'))`
     display: none;
   }
 `;
-const AuthControls = styled.div.attrs(dataComponent('AuthControls'))`
-  display: flex;
-  align-items: center;
-  gap: ${theme.spacing.sm};
-  flex: 0 0 auto;
-`;
-const AuthBadge = styled.span.attrs(dataComponent('AuthBadge'))`
-  font-size: 0.85rem;
-  color: ${theme.colors.navText};
-  opacity: 0.9;
-  max-width: 160px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-`;
 const NavTab = styled.button.attrs((props: NavButtonProps) => ({
   'data-component': 'NavTab',
   'aria-label': props['aria-label'],
@@ -348,6 +337,144 @@ const AuthHint = styled.p.attrs(dataComponent('AuthHint'))`
   color: ${theme.colors.textSecondary};
   font-size: 0.85rem;
 `;
+const ProfileMenuButton = styled.button.attrs(dataComponent('ProfileMenuButton'))`
+  display: inline-flex;
+  align-items: center;
+  gap: ${theme.spacing.sm};
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: ${theme.colors.navText};
+  border-radius: ${theme.radii.button};
+  padding: 4px 10px 4px 6px;
+  cursor: pointer;
+  font: ${theme.font.button};
+  font-size: 0.8rem;
+  transition: background 0.2s, color 0.2s;
+  &:hover, &:focus {
+    background: ${theme.colors.accent};
+    color: ${theme.colors.text};
+    outline: 2px solid ${theme.colors.accent};
+  }
+`;
+const ProfileAvatar = styled.div.attrs(dataComponent('ProfileAvatar'))`
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: ${theme.colors.card};
+  color: ${theme.colors.primary};
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+`;
+const ProfileMenuLabel = styled.span.attrs(dataComponent('ProfileMenuLabel'))`
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;
+const HamburgerIcon = styled.span.attrs(dataComponent('HamburgerIcon'))`
+  width: 16px;
+  height: 10px;
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: space-between;
+  span {
+    height: 2px;
+    width: 100%;
+    background: currentColor;
+    border-radius: 2px;
+  }
+`;
+const ProfileDrawerOverlay = styled.div.attrs(dataComponent('ProfileDrawerOverlay'))`
+  position: fixed;
+  inset: 0;
+  background: rgba(34, 34, 34, 0.28);
+  z-index: ${theme.z.drawer};
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+`;
+const ProfileDrawer = styled.div.attrs(dataComponent('ProfileDrawer'))`
+  width: 320px;
+  max-width: 90vw;
+  height: 100%;
+  background: ${theme.colors.card};
+  box-shadow: ${theme.shadow.card};
+  padding: ${theme.spacing.md};
+  overflow-y: auto;
+`;
+const DrawerSection = styled.div.attrs(dataComponent('DrawerSection'))`
+  margin-bottom: ${theme.spacing.lg};
+`;
+const DrawerTitle = styled.h3.attrs(dataComponent('DrawerTitle'))`
+  margin: 0 0 ${theme.spacing.sm} 0;
+  color: ${theme.colors.primary};
+`;
+const DrawerTabList = styled.div.attrs(dataComponent('DrawerTabList'))`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: ${theme.spacing.sm};
+`;
+const ProfileFormRow = styled.div.attrs(dataComponent('ProfileFormRow'))`
+  display: grid;
+  gap: 8px;
+`;
+const ReadOnlyValueButton = styled.button.attrs(dataComponent('ReadOnlyValueButton'))`
+  min-width: 48px;
+  padding: 6px 10px;
+  border-radius: ${theme.radii.input};
+  border: 1px solid ${theme.colors.border};
+  background: ${theme.colors.card};
+  color: ${theme.colors.primary};
+  font-weight: 600;
+  cursor: pointer;
+  &:hover, &:focus {
+    outline: 2px solid ${theme.colors.accent};
+  }
+`;
+const NumberPadOverlay = styled.div.attrs(dataComponent('NumberPadOverlay'))`
+  position: fixed;
+  inset: 0;
+  background: rgba(34, 34, 34, 0.35);
+  z-index: ${theme.z.modal + 1};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+`;
+const NumberPadCard = styled.div.attrs(dataComponent('NumberPadCard'))`
+  background: ${theme.colors.card};
+  border-radius: ${theme.radii.card};
+  box-shadow: ${theme.shadow.card};
+  width: min(320px, 90vw);
+  padding: ${theme.spacing.md};
+  display: grid;
+  gap: ${theme.spacing.sm};
+`;
+const NumberPadDisplay = styled.div.attrs(dataComponent('NumberPadDisplay'))`
+  height: 44px;
+  border-radius: ${theme.radii.input};
+  border: 1px solid ${theme.colors.border};
+  background: ${theme.colors.background};
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 ${theme.spacing.sm};
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: ${theme.colors.primary};
+`;
+const NumberPadGrid = styled.div.attrs(dataComponent('NumberPadGrid'))`
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: ${theme.spacing.sm};
+`;
 const SectionTitle = styled.h2.attrs(() => ({
   'data-component': 'SectionTitle',
 } as Record<string, unknown>))`
@@ -377,6 +504,48 @@ const Button = styled.button.attrs(dataComponent('Button'))<ButtonProps>`
     cursor: not-allowed;
     box-shadow: none;
   }
+`;
+const IconButton = styled(Button).attrs(dataComponent('IconButton'))`
+  min-width: unset;
+  margin: 0;
+  padding: 6px;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+`;
+const NumberPadButton = styled(Button).attrs(dataComponent('NumberPadButton'))`
+  min-width: unset;
+  margin: 0;
+  padding: 10px 0;
+  font-size: 0.95rem;
+`;
+const SpinnerDot = styled.div.attrs(dataComponent('SpinnerDot'))`
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid ${theme.colors.border};
+  border-top-color: ${theme.colors.accent};
+  animation: spin 0.8s linear infinite;
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+`;
+const LoadingButton = styled(Button).attrs(dataComponent('LoadingButton'))`
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+`;
+const DrawerTabButton = styled(Button).attrs(dataComponent('DrawerTabButton'))`
+  min-width: unset;
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 0.8rem;
 `;
 const AuthButton = styled(Button).attrs(dataComponent('AuthButton'))`
   margin: 0;
@@ -724,24 +893,6 @@ const CalendarDrawer = styled.div.attrs(dataComponent('CalendarDrawer'))`
   max-height: 80vh;
   overflow-y: auto;
 `;
-const CalendarOpenButton = styled(Button).attrs(dataComponent('CalendarOpenButton'))`
-  min-width: unset;
-  margin: 0;
-  padding: ${theme.spacing.xs} ${theme.spacing.md};
-  font-size: 0.8rem;
-  color: ${theme.colors.navText};
-  border-color: ${theme.colors.navText};
-  background: rgba(255, 255, 255, 0.08);
-  &:hover, &:focus {
-    background: ${theme.colors.accent};
-    color: ${theme.colors.text};
-    outline: 2px solid ${theme.colors.accent};
-  }
-  @media (max-width: 720px) {
-    padding: 4px 10px;
-    font-size: 0.72rem;
-  }
-`;
 const CalendarWeekday = styled.div.attrs(dataComponent('CalendarWeekday'))`
   font-size: 0.7rem;
   text-transform: uppercase;
@@ -842,6 +993,27 @@ const PromoIcon = () => (
   <SvgIcon viewBox="0 0 24 24" aria-hidden="true">
     <path d="M7 7h6l4 4-6 6-4-4V7z" />
     <circle cx="10" cy="10" r="1.5" />
+  </SvgIcon>
+);
+const PlusIcon = () => (
+  <SvgIcon viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M12 5v14" />
+    <path d="M5 12h14" />
+  </SvgIcon>
+);
+const MinusIcon = () => (
+  <SvgIcon viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M5 12h14" />
+  </SvgIcon>
+);
+const EqualizerIcon = () => (
+  <SvgIcon viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M6 4v16" />
+    <path d="M12 4v16" />
+    <path d="M18 4v16" />
+    <path d="M4 8h4" />
+    <path d="M10 12h4" />
+    <path d="M16 16h4" />
   </SvgIcon>
 );
 
@@ -1012,7 +1184,12 @@ function useAPI(getIdToken?: () => Promise<string | null>) {
         }
         return response.json();
       }),
-    upsertUserProfile: (profile: { displayName?: string; photoURL?: string }) =>
+    upsertUserProfile: (profile: {
+      displayName?: string;
+      photoURL?: string;
+      goalCalories?: number;
+      macroPercents?: MacroPercents;
+    }) =>
       run(async () => {
         const authHeaders = await getAuthHeaders();
         const response = await fetch(`${baseUrl}/users/me`, {
@@ -1022,6 +1199,19 @@ function useAPI(getIdToken?: () => Promise<string | null>) {
         });
         if (!response.ok) {
           throw new Error(`Profile update failed with status ${response.status}`);
+        }
+        return response.json();
+      }),
+    updateExerciseEntry: (entryId: string, sets: ExerciseSet[]) =>
+      run(async () => {
+        const authHeaders = await getAuthHeaders();
+        const response = await fetch(`${baseUrl}/tracker/entries/${entryId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", ...authHeaders },
+          body: JSON.stringify({ sets }),
+        });
+        if (!response.ok) {
+          throw new Error(`Entry update failed with status ${response.status}`);
         }
         return response.json();
       }),
@@ -1133,6 +1323,14 @@ function roundToTenth(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
+function durationToMinutes(duration?: { value: number; unit: string }): number | null {
+  if (!duration) return null;
+  if (duration.unit === "min") return duration.value;
+  if (duration.unit === "sec") return Math.round(duration.value / 60);
+  if (duration.unit === "hr") return Math.round(duration.value * 60);
+  return duration.value;
+}
+
 // ---- APP ----
 function App() {
   const { user, loading: authLoading, signInWithGoogle, signOut, hasConfig, getIdToken } = useFirebaseAuth();
@@ -1141,6 +1339,22 @@ function App() {
   const [authError, setAuthError] = useState<string | null>(null);
   const isAuthed = Boolean(user);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileDetailsOpen, setProfileDetailsOpen] = useState(false);
+  const [profileNameDraft, setProfileNameDraft] = useState("");
+  const [profilePhotoDraft, setProfilePhotoDraft] = useState("");
+  const [profileGoalCaloriesDraft, setProfileGoalCaloriesDraft] = useState("");
+  const [profileMacroPercentsDraft, setProfileMacroPercentsDraft] = useState<MacroPercents>({
+    protein: 40,
+    carbs: 40,
+    fat: 20,
+  });
+  const [profileCaloriesPad, setProfileCaloriesPad] = useState<string | null>(null);
+  const [macroSliderPad, setMacroSliderPad] = useState<{
+    mealType: string;
+    macroKey: MacroKey;
+    value: number;
+  } | null>(null);
 
   // Navigation state
   const [tab, setTab] = useState(0); // 0:Tracker, 1:Nutrition, 2:Plans, 3:Library, 4:Promo
@@ -1300,6 +1514,30 @@ function App() {
     };
   }, [isAuthed, user]);
 
+  useEffect(() => {
+    if (!isAuthed) {
+      setProfileNameDraft("");
+      setProfilePhotoDraft("");
+      setProfileGoalCaloriesDraft("");
+      setProfileMacroPercentsDraft({ protein: 40, carbs: 40, fat: 20 });
+      return;
+    }
+    const name = userProfile?.displayName || user?.displayName || "";
+    const photo = userProfile?.photoURL || user?.photoURL || "";
+    const calories = userProfile?.goalCalories ?? "";
+    const macroPercents = userProfile?.macroPercents || { protein: 40, carbs: 40, fat: 20 };
+    setProfileNameDraft(name);
+    setProfilePhotoDraft(photo);
+    setProfileGoalCaloriesDraft(calories === "" ? "" : String(calories));
+    setProfileMacroPercentsDraft(macroPercents);
+  }, [isAuthed, user, userProfile]);
+
+  useEffect(() => {
+    if (!profileOpen) {
+      setProfileDetailsOpen(false);
+    }
+  }, [profileOpen]);
+
   const nutritionDates = new Set(nutritionDays.map(d => d.date));
   const sortedNutritionDates = [...nutritionDays]
     .map(d => d.date)
@@ -1389,10 +1627,12 @@ function App() {
       startDate,
       weekLabel: injectWeekLabel,
     });
+    const refreshedWeeks = await refreshWeeks();
     if (result && typeof result === "object" && "id" in result) {
       setSelectedWeek(String((result as { id: string }).id));
+    } else if (refreshedWeeks && refreshedWeeks[0]) {
+      setSelectedWeek(refreshedWeeks[0].id);
     }
-    const refreshedWeeks = await refreshWeeks();
     const nextWeekLabel = refreshedWeeks ? `Week ${refreshedWeeks.length + 1}` : `Week ${weeks.length + 1}`;
     setInjectWeekLabel(nextWeekLabel);
     setInjectModalOpen(false);
@@ -1412,10 +1652,60 @@ function App() {
     setAuthError(null);
     try {
       await signOut();
+      setProfileOpen(false);
+      setProfileDetailsOpen(false);
     } catch (error) {
       setAuthError("Sign-out failed. Please try again.");
     }
   };
+
+  const handleProfileSave = async () => {
+    setAuthError(null);
+    if (!isAuthed) {
+      setAuthError("Sign in to update your profile.");
+      return;
+    }
+    const profile = await api.upsertUserProfile({
+      displayName: profileNameDraft || undefined,
+      photoURL: profilePhotoDraft || undefined,
+      goalCalories: profileGoalCaloriesDraft === "" ? undefined : Number(profileGoalCaloriesDraft),
+      macroPercents: profileMacroPercentsDraft,
+    });
+    if (profile && typeof profile === "object" && "id" in profile) {
+    setUserProfile(profile as UserProfile);
+    }
+  };
+
+  const handleProfileCaloriesDigit = (digit: string) => {
+    setProfileCaloriesPad(prev => {
+      if (prev === null) return prev;
+      return `${prev}${digit}`.replace(/^0+(?=\\d)/, "");
+    });
+  };
+  const handleProfileCaloriesBackspace = () => {
+    setProfileCaloriesPad(prev => (prev === null ? prev : prev.slice(0, -1)));
+  };
+  const handleProfileCaloriesClear = () => {
+    setProfileCaloriesPad(prev => (prev === null ? prev : ""));
+  };
+  const handleProfileCaloriesSave = () => {
+    if (profileCaloriesPad === null) return;
+    setProfileGoalCaloriesDraft(profileCaloriesPad);
+    setProfileCaloriesPad(null);
+  };
+  const profileMacroTotal = profileMacroPercentsDraft.protein
+    + profileMacroPercentsDraft.carbs
+    + profileMacroPercentsDraft.fat;
+
+  const profileLabel = userProfile?.displayName || user?.displayName || userProfile?.email || user?.email || "Sign in";
+  const profileEmail = userProfile?.email || user?.email || "";
+  const profilePhoto = userProfile?.photoURL || user?.photoURL || "";
+  const profileInitials = profileLabel
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part[0]?.toUpperCase() || "")
+    .join("") || "U";
 
   const renderAuthGate = (title: string, message: string) => (
     <Section data-component="AuthGateSection">
@@ -1426,68 +1716,255 @@ function App() {
         {!hasConfig && (
           <AuthGateText>Missing Firebase config in the environment.</AuthGateText>
         )}
-        <Button onClick={handleSignIn} disabled={!hasConfig || authLoading}>
+        <LoadingButton onClick={handleSignIn} disabled={!hasConfig || authLoading}>
+          {authLoading && <SpinnerDot />}
           Continue with Google
-        </Button>
+        </LoadingButton>
         {authError && <AuthGateText>{authError}</AuthGateText>}
       </AuthGateCard>
     </Section>
   );
 
+  const renderCalendarContent = (showClose: boolean, onClose?: () => void) => (
+    <>
+      <CalendarHeader>
+        <CalendarNavButton onClick={() => setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))} aria-label="Previous month">
+          ‹
+        </CalendarNavButton>
+        <CalendarTitle>{monthLabel}</CalendarTitle>
+        <CalendarNavButton onClick={() => setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))} aria-label="Next month">
+          ›
+        </CalendarNavButton>
+      </CalendarHeader>
+      <CalendarGrid>
+        {calendarWeekdays.map(dayLabel => (
+          <CalendarWeekday key={dayLabel}>{dayLabel}</CalendarWeekday>
+        ))}
+        {calendarDays.map((date: Date) => {
+          const dateKey = formatDate(date);
+          const isInMonth = date.getMonth() === calendarMonth.getMonth();
+          const isSelected = dateKey === selectedDate;
+          const hasNutrition = nutritionDates.has(dateKey);
+          const hasWorkout = hasWorkoutDay(date);
+          return (
+            <CalendarDayButton
+              key={dateKey}
+              $muted={!isInMonth}
+              $hasWorkout={hasWorkout}
+              $isSelected={isSelected}
+              onClick={() => {
+                handleSelectDate(dateKey);
+                if (onClose) {
+                  onClose();
+                }
+              }}
+            >
+              {date.getDate()}
+              {hasNutrition && <CalendarDot />}
+            </CalendarDayButton>
+          );
+        })}
+      </CalendarGrid>
+      <CalendarLegend>
+        <LegendItem>
+          <LegendSwatch $color={theme.colors.accent} />
+          Nutrition logged
+        </LegendItem>
+        <LegendItem>
+          <LegendSwatch $color="rgba(67, 170, 139, 0.12)" />
+          Workout week
+        </LegendItem>
+      </CalendarLegend>
+      {showClose && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: theme.spacing.sm }}>
+          <Button variant="secondary" onClick={onClose}>Close</Button>
+        </div>
+      )}
+    </>
+  );
+
   const renderCalendarDrawer = () => (
     <CalendarDrawerOverlay onClick={() => setCalendarOpen(false)}>
       <CalendarDrawer onClick={e => e.stopPropagation()}>
-        <CalendarHeader>
-          <CalendarNavButton onClick={() => setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))} aria-label="Previous month">
-            ‹
-          </CalendarNavButton>
-          <CalendarTitle>{monthLabel}</CalendarTitle>
-          <CalendarNavButton onClick={() => setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))} aria-label="Next month">
-            ›
-          </CalendarNavButton>
-        </CalendarHeader>
-        <CalendarGrid>
-          {calendarWeekdays.map(dayLabel => (
-            <CalendarWeekday key={dayLabel}>{dayLabel}</CalendarWeekday>
-          ))}
-          {calendarDays.map((date: Date) => {
-            const dateKey = formatDate(date);
-            const isInMonth = date.getMonth() === calendarMonth.getMonth();
-            const isSelected = dateKey === selectedDate;
-            const hasNutrition = nutritionDates.has(dateKey);
-            const hasWorkout = hasWorkoutDay(date);
-            return (
-              <CalendarDayButton
-                key={dateKey}
-                $muted={!isInMonth}
-                $hasWorkout={hasWorkout}
-                $isSelected={isSelected}
-                onClick={() => {
-                  handleSelectDate(dateKey);
-                  setCalendarOpen(false);
-                }}
-              >
-                {date.getDate()}
-                {hasNutrition && <CalendarDot />}
-              </CalendarDayButton>
-            );
-          })}
-        </CalendarGrid>
-        <CalendarLegend>
-          <LegendItem>
-            <LegendSwatch $color={theme.colors.accent} />
-            Nutrition logged
-          </LegendItem>
-          <LegendItem>
-            <LegendSwatch $color="rgba(67, 170, 139, 0.12)" />
-            Workout week
-          </LegendItem>
-        </CalendarLegend>
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: theme.spacing.sm }}>
-          <Button variant="secondary" onClick={() => setCalendarOpen(false)}>Close</Button>
-        </div>
+        {renderCalendarContent(true, () => setCalendarOpen(false))}
       </CalendarDrawer>
     </CalendarDrawerOverlay>
+  );
+
+  const renderProfileDrawer = () => (
+    <ProfileDrawerOverlay onClick={() => setProfileOpen(false)}>
+      <ProfileDrawer onClick={e => e.stopPropagation()}>
+        <DrawerSection>
+          <DrawerTitle>Navigation</DrawerTitle>
+          <DrawerTabList>
+            {[
+              { label: "Tracker", index: 0 },
+              { label: "Nutrition", index: 1 },
+              { label: "Plans", index: 2 },
+              { label: "Library", index: 3 },
+              { label: "Promo", index: 4 },
+            ].map(item => (
+              <DrawerTabButton
+                key={item.label}
+                variant={tab === item.index ? undefined : "secondary"}
+                onClick={() => {
+                  setTab(item.index);
+                  setProfileOpen(false);
+                }}
+              >
+                {item.label}
+              </DrawerTabButton>
+            ))}
+          </DrawerTabList>
+        </DrawerSection>
+        <DrawerSection>
+          <DrawerTitle>Calendar</DrawerTitle>
+          {isAuthed ? (
+            <Card data-component="CalendarInlineCard">
+              {renderCalendarContent(false)}
+            </Card>
+          ) : (
+            <Card data-component="CalendarCollapsedCard">
+              <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>
+                Sign in to see your calendar.
+              </div>
+            </Card>
+          )}
+        </DrawerSection>
+        <DrawerSection>
+          <DrawerTitle>Profile</DrawerTitle>
+          {isAuthed ? (
+            <>
+              <Card data-component="ProfileSummaryCard">
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <ProfileAvatar>
+                    {profilePhoto ? <img src={profilePhoto} alt={profileLabel} /> : profileInitials}
+                  </ProfileAvatar>
+                  <div>
+                    <div style={{ fontWeight: 700 }}>{profileLabel}</div>
+                    {profileEmail && (
+                      <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>{profileEmail}</div>
+                    )}
+                  </div>
+                </div>
+              </Card>
+              <ProfileFormRow>
+                <Button onClick={() => setProfileDetailsOpen(prev => !prev)}>
+                  {profileDetailsOpen ? "Hide profile details" : "Edit profile"}
+                </Button>
+                {profileDetailsOpen && (
+                  <>
+                    <Label htmlFor="profile-name">Display name</Label>
+                    <Input
+                      id="profile-name"
+                      data-component="ProfileNameInput"
+                      value={profileNameDraft}
+                      onChange={e => setProfileNameDraft(e.target.value)}
+                    />
+                    <Label htmlFor="profile-photo">Photo URL</Label>
+                    <Input
+                      id="profile-photo"
+                      data-component="ProfilePhotoInput"
+                      value={profilePhotoDraft}
+                      onChange={e => setProfilePhotoDraft(e.target.value)}
+                    />
+                    <Label htmlFor="profile-calories">Goal calories</Label>
+                    <ReadOnlyValueButton
+                      id="profile-calories"
+                      data-component="ProfileGoalCaloriesInput"
+                      onClick={() => setProfileCaloriesPad(profileGoalCaloriesDraft || "")}
+                    >
+                      {profileGoalCaloriesDraft || "0"}
+                    </ReadOnlyValueButton>
+                    <Label>Macro percents</Label>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>
+                        {profileMacroTotal === 100
+                          ? "Macro split totals 100%"
+                          : profileMacroTotal > 100
+                            ? `Over by ${profileMacroTotal - 100}%`
+                            : `Under by ${100 - profileMacroTotal}%`}
+                      </div>
+                      <IconButton
+                        data-component="MacroEqualizerButton"
+                        variant="secondary"
+                        onClick={() => setProfileMacroPercentsDraft({ protein: 40, carbs: 40, fat: 20 })}
+                        title="Reset to default split"
+                      >
+                        <EqualizerIcon />
+                      </IconButton>
+                    </div>
+                    <div style={{ display: "grid", gap: 10 }}>
+                      {([
+                        { key: "protein", label: "Protein" },
+                        { key: "carbs", label: "Carbs" },
+                        { key: "fat", label: "Fat" },
+                      ] as const).map(item => (
+                        <div key={item.key} style={{ display: "grid", gap: 4 }}>
+                          <Label>{item.label} {profileMacroPercentsDraft[item.key]}%</Label>
+                          <SliderInput
+                            min={0}
+                            max={100}
+                            step={1}
+                            value={profileMacroPercentsDraft[item.key]}
+                            onChange={e =>
+                              setProfileMacroPercentsDraft(prev => ({
+                                ...prev,
+                                [item.key]: Number(e.target.value) || 0,
+                              }))
+                            }
+                          />
+                        </div>
+                      ))}
+                    </div>
+                <LoadingButton onClick={handleProfileSave} disabled={api.loading}>
+                  {api.loading && <SpinnerDot />}
+                  Save profile
+                </LoadingButton>
+                  </>
+                )}
+                <AuthButton variant="secondary" onClick={handleSignOut}>Sign out</AuthButton>
+                {authError && <AuthGateText>{authError}</AuthGateText>}
+              </ProfileFormRow>
+              {profileCaloriesPad !== null && (
+                <NumberPadOverlay onClick={() => setProfileCaloriesPad(null)}>
+                  <NumberPadCard onClick={e => e.stopPropagation()}>
+                    <div style={{ fontWeight: 700 }}>Goal calories</div>
+                    <NumberPadDisplay>{profileCaloriesPad || "0"}</NumberPadDisplay>
+                    <NumberPadGrid>
+                      {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map(digit => (
+                        <NumberPadButton key={digit} onClick={() => handleProfileCaloriesDigit(digit)}>
+                          {digit}
+                        </NumberPadButton>
+                      ))}
+                      <NumberPadButton variant="secondary" onClick={handleProfileCaloriesClear}>C</NumberPadButton>
+                      <NumberPadButton onClick={() => handleProfileCaloriesDigit("0")}>0</NumberPadButton>
+                      <NumberPadButton variant="secondary" onClick={handleProfileCaloriesBackspace}>⌫</NumberPadButton>
+                    </NumberPadGrid>
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                      <Button variant="secondary" onClick={() => setProfileCaloriesPad(null)}>Cancel</Button>
+                      <LoadingButton onClick={handleProfileCaloriesSave} disabled={api.loading}>
+                        {api.loading && <SpinnerDot />}
+                        Done
+                      </LoadingButton>
+                    </div>
+                  </NumberPadCard>
+                </NumberPadOverlay>
+              )}
+            </>
+          ) : (
+            <AuthGateCard>
+              <AuthGateTitle>Sign in</AuthGateTitle>
+              <AuthGateText>Use Google to access your tracker, nutrition, and profile.</AuthGateText>
+              <Button onClick={handleSignIn} disabled={!hasConfig || authLoading}>
+                Continue with Google
+              </Button>
+              {authError && <AuthGateText>{authError}</AuthGateText>}
+            </AuthGateCard>
+          )}
+        </DrawerSection>
+      </ProfileDrawer>
+    </ProfileDrawerOverlay>
   );
 
   // ---- Tracker Section ----
@@ -1605,10 +2082,19 @@ function App() {
     time: string;
     onClose: () => void;
   }) {
-    // For demo, local state only
+    // Local draft state for editing entry progress before saving.
     const [entries, setEntries] = useState<ExerciseEntry[]>(session ? session.entries : []);
     const [adding, setAdding] = useState(false);
     const [newExerciseId, setNewExerciseId] = useState("");
+    const [collapsedEntries, setCollapsedEntries] = useState<Set<string>>(
+      new Set(session ? session.entries.map(entry => entry.id) : [])
+    );
+    const [numberPad, setNumberPad] = useState<{
+      entryId: string;
+      setIndex: number;
+      field: "actualReps" | "rpe" | "actualDuration";
+      value: string;
+    } | null>(null);
     const [newSets, setNewSets] = useState<Array<{
       weight: string;
       reps: string;
@@ -1630,7 +2116,7 @@ function App() {
             return {
               weight: Number(s.weight) || 0,
               reps: Number(s.reps) || 0,
-              rpe: Number(s.rpe) || 0,
+              rpe: s.rpe === "" ? undefined : Number(s.rpe) || 0,
               ...(durationValue !== null ? { duration: { value: durationValue, unit: s.durationUnit || "min" } } : {}),
             };
           }),
@@ -1643,6 +2129,95 @@ function App() {
     function removeEntry(idx: number) {
       setEntries(entries.filter((_, i) => i !== idx));
     }
+    const toggleEntryCollapsed = (entryId: string) => {
+      setCollapsedEntries(prev => {
+        const next = new Set(prev);
+        if (next.has(entryId)) {
+          next.delete(entryId);
+        } else {
+          next.add(entryId);
+        }
+        return next;
+      });
+    };
+    const updateEntrySet = (
+      entryId: string,
+      setIndex: number,
+      field: "actualReps" | "rpe" | "actualDuration",
+      value: string
+    ) => {
+      setEntries(prev =>
+        prev.map(entry => {
+          if (entry.id !== entryId) return entry;
+          const nextSets = entry.sets.map((set, idx) => {
+            if (idx !== setIndex) return set;
+            const nextValue = value === "" ? undefined : Number(value);
+            if (field === "actualReps") {
+              return { ...set, actualReps: nextValue };
+            }
+            if (field === "actualDuration") {
+              return { ...set, actualDuration: nextValue };
+            }
+            return { ...set, rpe: nextValue };
+          });
+          return { ...entry, sets: nextSets };
+        })
+      );
+    };
+    const openNumberPad = (entryId: string, setIndex: number, field: "actualReps" | "rpe" | "actualDuration") => {
+      const entry = entries.find(item => item.id === entryId);
+      const currentValue = entry?.sets[setIndex]?.[field];
+      setNumberPad({
+        entryId,
+        setIndex,
+        field,
+        value: currentValue === undefined || currentValue === null ? "" : String(currentValue),
+      });
+    };
+    const handleNumberPress = (digit: string) => {
+      setNumberPad(prev => {
+        if (!prev) return prev;
+        const next = `${prev.value}${digit}`.replace(/^0+(?=\\d)/, "");
+        if (prev.field === "rpe") {
+          const num = Number(next);
+          if (Number.isNaN(num) || num > 9) {
+            return prev;
+          }
+        }
+        return { ...prev, value: next };
+      });
+    };
+    const handleNumberBackspace = () => {
+      setNumberPad(prev => (prev ? { ...prev, value: prev.value.slice(0, -1) } : prev));
+    };
+    const handleNumberClear = () => {
+      setNumberPad(prev => (prev ? { ...prev, value: "" } : prev));
+    };
+    const handleNumberSave = async () => {
+      if (!numberPad) return;
+      const currentEntry = entries.find(entry => entry.id === numberPad.entryId);
+      if (!currentEntry) {
+        setNumberPad(null);
+        return;
+      }
+      const nextValue = numberPad.value === "" ? undefined : Number(numberPad.value);
+      const nextSets = currentEntry.sets.map((set, idx) => {
+        if (idx !== numberPad.setIndex) return set;
+        if (numberPad.field === "actualReps") {
+          return { ...set, actualReps: nextValue };
+        }
+        if (numberPad.field === "actualDuration") {
+          return { ...set, actualDuration: nextValue };
+        }
+        return { ...set, rpe: nextValue };
+      });
+      setEntries(prev =>
+        prev.map(entry => (entry.id === currentEntry.id ? { ...entry, sets: nextSets } : entry))
+      );
+      await api.updateExerciseEntry(currentEntry.id, nextSets);
+      await refreshWeeks();
+      setNumberPad(null);
+    };
     return (
       <ModalOverlay onClick={onClose}>
         <Modal onClick={e => e.stopPropagation()}>
@@ -1729,7 +2304,10 @@ function App() {
                     </div>
                   ))}
                   <Button data-component="AddSetButton" variant="secondary" onClick={() => setNewSets([...newSets, { weight: "", reps: "", rpe: "", durationValue: "", durationUnit: "min" }])}>+ Set</Button>
-                  <Button data-component="SaveExerciseButton" onClick={addEntry}>Save Exercise</Button>
+                  <LoadingButton data-component="SaveExerciseButton" onClick={addEntry} disabled={api.loading}>
+                    {api.loading && <SpinnerDot />}
+                    Save Exercise
+                  </LoadingButton>
                   <Button data-component="CancelAddExerciseButton" variant="secondary" onClick={() => setAdding(false)}>Cancel</Button>
                 </Card>
               )}
@@ -1744,7 +2322,8 @@ function App() {
               if (!ex) {
                 return null;
               }
-              const entryHasDuration = entry.sets.some(set => set.duration && set.duration.value !== undefined);
+              const entryHasDuration = entry.sets.every(set => set.duration && set.duration.value !== undefined);
+              const isCollapsed = collapsedEntries.has(entry.id);
               return (
                 <Card data-component="ExerciseEntryCard" key={entry.id}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1753,38 +2332,124 @@ function App() {
                       <strong>{ex.title}</strong>
                       <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>{ex.type}</div>
                     </div>
-                    <Button data-component="RemoveExerciseButton" variant="secondary" onClick={() => removeEntry(idx)}>Remove</Button>
+                    <IconButton
+                      data-component="ToggleExerciseButton"
+                      variant="secondary"
+                      onClick={() => toggleEntryCollapsed(entry.id)}
+                    >
+                      {isCollapsed ? <PlusIcon /> : <MinusIcon />}
+                    </IconButton>
                   </div>
-                  <SetTable>
-                    <thead>
-                      <tr>
-                        <th>Set</th>
-                        <th>{entryHasDuration ? "Duration" : "Weight"}</th>
-                        <th>Reps</th>
-                        <th>RPE</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {entry.sets.map((set, i) => (
-                        <tr key={i}>
-                          <td>{i + 1}</td>
-                          <td>
-                            {entryHasDuration
-                              ? (set.duration ? `${set.duration.value} ${set.duration.unit}` : "-")
-                              : set.weight}
-                          </td>
-                          <td>{set.reps}</td>
-                          <td>{set.rpe}</td>
+                  {isCollapsed ? (
+                    <div style={{ marginTop: 12, fontSize: 12, color: theme.colors.textSecondary }}>
+                      {entry.sets.length} set{entry.sets.length === 1 ? "" : "s"} • {entryHasDuration ? "Duration" : "Reps"} tracking
+                    </div>
+                  ) : (
+                    <SetTable>
+                      <thead>
+                        <tr>
+                          <th>Set</th>
+                          <th>{entryHasDuration ? "Duration" : "Weight"}</th>
+                          {!entryHasDuration && <th>Reps</th>}
+                          <th>RPE</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </SetTable>
+                      </thead>
+                      <tbody>
+                        {entry.sets.map((set, i) => (
+                          <tr key={i}>
+                            <td>{i + 1}</td>
+                          <td>
+                            {entryHasDuration ? (
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", minWidth: 120 }}>
+                                <ReadOnlyValueButton
+                                  data-component="ActualDurationButton"
+                                  onClick={() => openNumberPad(entry.id, i, "actualDuration")}
+                                >
+                                  {set.actualDuration ?? "—"}
+                                </ReadOnlyValueButton>
+                                <span
+                                  title="Actual duration / target duration (min)"
+                                  style={{ display: "inline-flex", alignItems: "center", color: theme.colors.textSecondary }}
+                                >
+                                  <span style={{ fontSize: 16, lineHeight: 1 }}>/</span>
+                                  <span style={{ fontSize: 11, lineHeight: 1, marginLeft: 4 }}>
+                                    {durationToMinutes(set.duration) ?? "—"}m
+                                  </span>
+                                </span>
+                              </div>
+                            ) : (
+                              set.weight
+                            )}
+                          </td>
+                            {!entryHasDuration && (
+                              <td>
+                                <div style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", minWidth: 120 }}>
+                                  <ReadOnlyValueButton
+                                    data-component="ActualRepsButton"
+                                    onClick={() => openNumberPad(entry.id, i, "actualReps")}
+                                  >
+                                    {set.actualReps ?? "—"}
+                                  </ReadOnlyValueButton>
+                                  <span
+                                    title="Actual reps / target reps"
+                                    style={{ display: "inline-flex", alignItems: "center", color: theme.colors.textSecondary }}
+                                  >
+                                    <span style={{ fontSize: 16, lineHeight: 1 }}>/</span>
+                                    <span style={{ fontSize: 11, lineHeight: 1, marginLeft: 4 }}>{set.reps}</span>
+                                  </span>
+                                </div>
+                              </td>
+                            )}
+                            <td>
+                              <ReadOnlyValueButton
+                                data-component="ActualRpeButton"
+                                onClick={() => openNumberPad(entry.id, i, "rpe")}
+                              >
+                                {set.rpe ?? "—"}
+                              </ReadOnlyValueButton>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </SetTable>
+                  )}
                 </Card>
               );
             })}
           </div>
           <Button data-component="CloseSessionModalButton" onClick={onClose}>Close</Button>
         </Modal>
+        {numberPad && (
+          <NumberPadOverlay onClick={() => setNumberPad(null)}>
+            <NumberPadCard onClick={e => e.stopPropagation()}>
+              <div style={{ fontWeight: 700 }}>
+                {numberPad.field === "rpe"
+                  ? "RPE (0-9)"
+                  : numberPad.field === "actualDuration"
+                    ? "Actual duration (min)"
+                    : "Actual reps"}
+              </div>
+              <NumberPadDisplay>{numberPad.value || "0"}</NumberPadDisplay>
+              <NumberPadGrid>
+                {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map(digit => (
+                  <NumberPadButton key={digit} onClick={() => handleNumberPress(digit)}>
+                    {digit}
+                  </NumberPadButton>
+                ))}
+                <NumberPadButton variant="secondary" onClick={handleNumberClear}>C</NumberPadButton>
+                <NumberPadButton onClick={() => handleNumberPress("0")}>0</NumberPadButton>
+                <NumberPadButton variant="secondary" onClick={handleNumberBackspace}>⌫</NumberPadButton>
+              </NumberPadGrid>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                <Button variant="secondary" onClick={() => setNumberPad(null)}>Cancel</Button>
+                  <LoadingButton onClick={handleNumberSave} disabled={api.loading}>
+                    {api.loading && <SpinnerDot />}
+                    Done
+                  </LoadingButton>
+              </div>
+            </NumberPadCard>
+          </NumberPadOverlay>
+        )}
       </ModalOverlay>
     );
   }
@@ -1808,11 +2473,12 @@ function App() {
       macroPercents: { ...defaultMacroPercents },
       meals: [],
     };
-    const macroPercents: MacroPercents = nutritionBase.macroPercents || defaultMacroPercents;
+    const macroPercents: MacroPercents = userProfile?.macroPercents || defaultMacroPercents;
     const meals = Array.isArray(nutritionBase.meals) ? nutritionBase.meals : [];
-    const goalMacros = gramsFromPercents(nutritionBase.calories || 0, macroPercents);
+    const goalCalories = userProfile?.goalCalories || 0;
+    const goalMacros = gramsFromPercents(goalCalories, macroPercents);
     const { prev: prevNutritionDate, next: nextNutritionDate } = getAdjacentNutritionDates(selectedDate);
-    const totalCalories = Number(nutritionBase.calories) || 0;
+    const totalCalories = Number(goalCalories) || 0;
     const percentUsed = macroPercents.protein + macroPercents.carbs + macroPercents.fat;
     const percentRemaining = Math.max(0, 100 - percentUsed);
     const caloriesRemaining = Math.round((totalCalories * percentRemaining) / 100);
@@ -1855,6 +2521,22 @@ function App() {
         )),
       }));
     };
+    const openMacroSliderPad = (type: string, key: MacroKey, value: number) => {
+      setMacroSliderPad({
+        mealType: type,
+        macroKey: key,
+        value,
+      });
+    };
+    const handleMacroSliderSave = () => {
+      if (!macroSliderPad) return;
+      handleMealMacroChange(
+        macroSliderPad.mealType,
+        macroSliderPad.macroKey,
+        String(macroSliderPad.value)
+      );
+      setMacroSliderPad(null);
+    };
     const formatMealValue = (key: MacroKey, value: number) => {
       if (nutritionUnit !== "percent") {
         return value;
@@ -1882,7 +2564,7 @@ function App() {
       const newDay = {
         id: dayId,
         date: selectedDate,
-        calories: nutritionBase.calories || 0,
+        calories: goalCalories,
         macroPercents: { ...macroPercents },
         meals: mealTypes.map(type => ({
           id: uid("meal"),
@@ -1915,13 +2597,14 @@ function App() {
             >
               Prev
             </DatePagerButton>
-            <Button
+            <LoadingButton
               data-component="AddNutritionDateButton"
               variant="secondary"
               onClick={addNutritionDate}
             >
+              {api.loading && <SpinnerDot />}
               Add Date
-            </Button>
+            </LoadingButton>
             <DatePagerButton
               variant="secondary"
               onClick={() => nextNutritionDate && handleSelectDate(nextNutritionDate)}
@@ -1933,73 +2616,78 @@ function App() {
         </Card>
         <Card data-component="MacroGoalsHeader">
           <MacroSummary>
-            <div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <MacroLabel>Total Calories</MacroLabel>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <Button
-                    variant={nutritionUnit === "grams" ? undefined : "secondary"}
-                    onClick={() => setNutritionUnit("grams")}
-                  >
-                    Grams
-                  </Button>
-                  <Button
-                    variant={nutritionUnit === "percent" ? undefined : "secondary"}
-                    onClick={() => setNutritionUnit("percent")}
-                  >
-                    Percent
-                  </Button>
-                </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <MacroLabel>Goal Macros</MacroLabel>
+              <div style={{ display: "flex", gap: 8 }}>
+                <Button
+                  variant={nutritionUnit === "grams" ? undefined : "secondary"}
+                  onClick={() => setNutritionUnit("grams")}
+                >
+                  Grams
+                </Button>
+                <Button
+                  variant={nutritionUnit === "percent" ? undefined : "secondary"}
+                  onClick={() => setNutritionUnit("percent")}
+                >
+                  Percent
+                </Button>
               </div>
-              <TotalCaloriesInput
-                type="number"
-                min={0}
-                value={nutritionBase.calories}
-                onChange={e => {
-                  const nextCalories = Number(e.target.value) || 0;
-                  upsertNutritionDay(selectedDate, prevDay => ({
-                    ...prevDay,
-                    calories: nextCalories,
-                  }));
-                }}
-              />
             </div>
-            {macroSliders.map(slider => {
-              const currentPercent = macroPercents[slider.key];
-              const grams = slider.caloriesPerGram === 0
-                ? 0
-                : Math.round(((totalCalories * currentPercent) / 100) / slider.caloriesPerGram);
-              return (
-                <SliderRow key={slider.key}>
-                  <MacroLabel>
-                    {slider.label} {nutritionUnit === "percent" ? `${currentPercent}%` : `${grams}g`}
-                  </MacroLabel>
-                  <SliderInput
-                    min={0}
-                    max={100}
-                    step={1}
-                    value={currentPercent}
-                    onChange={e => {
-                      const nextPercent = Number(e.target.value);
-                      upsertNutritionDay(selectedDate, prevDay => {
-                        return {
-                          ...prevDay,
-                          macroPercents: {
-                            ...(prevDay.macroPercents || defaultMacroPercents),
-                            [slider.key]: nextPercent,
-                          },
-                        };
-                      });
+            <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+              {macroSliders.map(slider => {
+                const currentPercent = macroPercents[slider.key];
+                const grams = slider.caloriesPerGram === 0
+                  ? 0
+                  : Math.round(((totalCalories * currentPercent) / 100) / slider.caloriesPerGram);
+                const value = nutritionUnit === "percent" ? currentPercent : grams;
+                const unitLabel = nutritionUnit === "percent" ? "%" : "g";
+                const accent = slider.key === "protein"
+                  ? theme.colors.success
+                  : slider.key === "carbs"
+                    ? theme.colors.accent
+                    : theme.colors.accent2;
+                return (
+                  <div
+                    key={slider.key}
+                    style={{
+                      display: "grid",
+                      gap: 4,
+                      flex: `${Math.max(currentPercent, 1)} 1 0`,
+                      padding: theme.spacing.sm,
+                      borderRadius: theme.radii.card,
+                      border: `1px solid ${theme.colors.border}`,
+                      background: `linear-gradient(135deg, ${accent}15, ${theme.colors.card})`,
                     }}
-                  />
-                  <SliderTicks>
-                    <span>0</span>
-                    <span>50</span>
-                    <span>100</span>
-                  </SliderTicks>
-                </SliderRow>
-              );
-            })}
+                  >
+                    <div style={{ fontSize: 12, color: accent, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                      {slider.label}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: accent }}>{value}</div>
+                      <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>{unitLabel}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gap: 6,
+                padding: theme.spacing.sm,
+                borderRadius: theme.radii.card,
+                background: theme.colors.background,
+                border: `1px solid ${theme.colors.border}`,
+              }}
+            >
+              <div style={{ fontSize: 12, color: theme.colors.textSecondary, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                Goal Calories
+              </div>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                <div style={{ fontSize: 28, fontWeight: 800 }}>{goalCalories}</div>
+                <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>kcal</div>
+              </div>
+            </div>
             {percentRemaining > 0 && (
               <div style={{ color: theme.colors.danger, fontSize: 12 }}>
                 {nutritionUnit === "percent"
@@ -2043,18 +2731,20 @@ function App() {
                 return (
                   <tr key={type}>
                     <td>{type}</td>
-                    {mealMacroKeys.map((k: MacroKey) => (
-                      <td key={k}>
-                        <Input
-                          data-component={`MealInput-${type}-${k}`}
-                          type="number"
-                          step={nutritionUnit === "percent" ? "0.1" : "1"}
-                          value={formatMealValue(k, meal.macros[k])}
-                          onChange={e => handleMealMacroChange(type, k, e.target.value)}
-                          style={{ width: 60, fontSize: 14, padding: 4, height: 32 }}
-                        />
-                      </td>
-                    ))}
+                    {mealMacroKeys.map((k: MacroKey) => {
+                      const value = formatMealValue(k, meal.macros[k]);
+                      return (
+                        <td key={k}>
+                          <ReadOnlyValueButton
+                            data-component={`MealInput-${type}-${k}`}
+                            onClick={() => openMacroSliderPad(type, k, value)}
+                            style={{ width: 60, fontSize: 14, padding: 4, height: 32 }}
+                          >
+                            {value}{nutritionUnit === "percent" ? "%" : "g"}
+                          </ReadOnlyValueButton>
+                        </td>
+                      );
+                    })}
                     <td>{mealTotalDisplay}{nutritionUnit === "percent" ? "%" : "g"}</td>
                   </tr>
                 );
@@ -2082,6 +2772,37 @@ function App() {
               </tr>
             </tfoot>
           </table>
+          {macroSliderPad && (
+            <NumberPadOverlay onClick={() => setMacroSliderPad(null)}>
+              <NumberPadCard onClick={e => e.stopPropagation()}>
+                <div style={{ fontWeight: 700 }}>
+                  {macroSliderPad.macroKey.charAt(0).toUpperCase() + macroSliderPad.macroKey.slice(1)} (
+                  {nutritionUnit === "percent" ? "%" : "g"})
+                </div>
+                <NumberPadDisplay>
+                  {macroSliderPad.value}{nutritionUnit === "percent" ? "%" : "g"}
+                </NumberPadDisplay>
+                <SliderInput
+                  min={0}
+                  max={nutritionUnit === "percent" ? 100 : 200}
+                  step={nutritionUnit === "percent" ? 1 : 1}
+                  value={macroSliderPad.value}
+                  onChange={e =>
+                    setMacroSliderPad(prev =>
+                      prev ? { ...prev, value: Number(e.target.value) || 0 } : prev
+                    )
+                  }
+                />
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                  <Button variant="secondary" onClick={() => setMacroSliderPad(null)}>Cancel</Button>
+                  <LoadingButton onClick={handleMacroSliderSave} disabled={api.loading}>
+                    {api.loading && <SpinnerDot />}
+                    Done
+                  </LoadingButton>
+                </div>
+              </NumberPadCard>
+            </NumberPadOverlay>
+          )}
         </Card>
       </Section>
     );
@@ -2299,7 +3020,7 @@ function App() {
                     );
                   })}
               </PlanModalBody>
-              <Button
+              <LoadingButton
                 data-component="InjectPlanButton"
                 disabled={!isAuthed || authLoading}
                 onClick={() => {
@@ -2309,8 +3030,9 @@ function App() {
                   setInjectModalOpen(true);
                 }}
               >
+                {(api.loading || authLoading) && <SpinnerDot />}
                 Inject Plan
-              </Button>
+              </LoadingButton>
               {!isAuthed && <AuthHint>Sign in to inject this plan into your tracker.</AuthHint>}
               <Button data-component="DownloadPlanButton" variant="secondary" onClick={() => alert('Download as PDF/JSON')}>Download</Button>
               <Button data-component="ClosePlanModalButton" variant="secondary" onClick={() => setSelectedPlan(null)}>Close</Button>
@@ -2349,7 +3071,10 @@ function App() {
               </select>
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
                 <Button variant="secondary" onClick={() => setInjectModalOpen(false)}>Cancel</Button>
-                <Button onClick={handleConfirmInjectPlan} disabled={!isAuthed || authLoading}>Inject</Button>
+                <LoadingButton onClick={handleConfirmInjectPlan} disabled={!isAuthed || authLoading || api.loading}>
+                  {(api.loading || authLoading) && <SpinnerDot />}
+                  Inject
+                </LoadingButton>
               </div>
               {!isAuthed && <AuthHint>Sign in to inject plans into your tracker.</AuthHint>}
             </InjectModal>
@@ -2529,28 +3254,17 @@ function App() {
           <NavTab active={tab === 3} onClick={() => setTab(3)} aria-label="Library">Library</NavTab>
           <NavTab active={tab === 4} onClick={() => setTab(4)} aria-label="Promo">Promo</NavTab>
         </AppNav>
-        <AuthControls>
-          {isAuthed ? (
-            <>
-              <AuthBadge title={userProfile?.email || user?.email || "Signed in"}>
-                {userProfile?.email || user?.email || userProfile?.displayName || user?.displayName || "Signed in"}
-              </AuthBadge>
-              <AuthButton variant="secondary" onClick={handleSignOut}>Sign out</AuthButton>
-            </>
-          ) : (
-            <AuthButton onClick={handleSignIn} disabled={!hasConfig || authLoading}>Sign in</AuthButton>
-          )}
-        </AuthControls>
-        <CalendarOpenButton
-          variant="secondary"
-          onClick={() => {
-            setCalendarMonth(parseDate(selectedDate));
-            setCalendarOpen(true);
-          }}
-          aria-label="Open calendar"
-        >
-          Calendar
-        </CalendarOpenButton>
+        <ProfileMenuButton onClick={() => setProfileOpen(true)} aria-label="Open profile menu">
+          <ProfileAvatar>
+            {profilePhoto ? <img src={profilePhoto} alt={profileLabel} /> : profileInitials}
+          </ProfileAvatar>
+          <ProfileMenuLabel>{isAuthed ? profileLabel : "Sign in"}</ProfileMenuLabel>
+          <HamburgerIcon aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </HamburgerIcon>
+        </ProfileMenuButton>
       </AppBar>
       <Main>
         {tab === 0 && renderTracker()}
@@ -2560,6 +3274,7 @@ function App() {
         {tab === 4 && renderAffiliatePromotion()}
       </Main>
       {calendarOpen && renderCalendarDrawer()}
+      {profileOpen && renderProfileDrawer()}
       <BottomNav>
         <BottomNavTab active={tab === 0} onClick={() => setTab(0)} aria-label="Fitness Tracker">
           <IconWrapper><TrackerIcon /></IconWrapper>

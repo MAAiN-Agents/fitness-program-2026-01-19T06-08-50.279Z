@@ -3,10 +3,11 @@ import * as functions from "firebase-functions";
 import express from "express";
 import cors from "cors";
 import { createClient, type ClientConfig, type SanityClient } from "@sanity/client";
-import * as admin from "firebase-admin";
+import { initializeApp, getApps } from "firebase-admin/app";
+import { getAuth, type DecodedIdToken } from "firebase-admin/auth";
 
 type MacroPercents = { protein: number; carbs: number; fat: number };
-type SetEntry = { weight: number; reps: number; rpe: number; duration?: { value: number; unit: string } };
+type SetEntry = { weight: number; reps: number; rpe?: number; actualReps?: number; actualDuration?: number; duration?: { value: number; unit: string } };
 type ExerciseEntryInput = { exerciseId: string; sets: SetEntry[] };
 type SessionInput = { day: string; time: string; label: string };
 type WeekInput = { startDate: string; endDate: string; label: string };
@@ -14,7 +15,7 @@ type InjectPlanRequest = { planId: string; startDate: string; weekLabel: string 
 type NutritionDayInput = { date: string; calories: number; macroPercents: MacroPercents };
 type NutritionDayUpsert = { date: string; patch: { id?: string; date: string; calories: number; macroPercents: MacroPercents; meals: Array<{ id: string; dayId: string; type: string; macros: { protein: number; carbs: number; fat: number; calories: number } }> } };
 type MealInput = { type: string; macros: { protein: number; carbs: number; fat: number; calories: number } };
-type UserProfileInput = { displayName?: string; photoURL?: string };
+type UserProfileInput = { displayName?: string; photoURL?: string; goalCalories?: number; macroPercents?: MacroPercents };
 
 const sanityConfig: ClientConfig = {
   projectId: process.env.SANITY_PROJECT_ID || process.env.VITE_SANITY_PROJECT_ID || "",
@@ -26,8 +27,8 @@ const sanityConfig: ClientConfig = {
 const sanityClient: SanityClient = createClient(sanityConfig);
 
 const app = express();
-if (!admin.apps.length) {
-  admin.initializeApp();
+if (!getApps().length) {
+  initializeApp();
 }
 const corsMiddleware = cors({
   origin: [
@@ -44,7 +45,7 @@ app.options("*", corsMiddleware);
 app.use(corsMiddleware);
 app.use(express.json());
 
-type AuthenticatedRequest = express.Request & { user?: admin.auth.DecodedIdToken };
+type AuthenticatedRequest = express.Request & { user?: DecodedIdToken };
 
 const requireAuth: express.RequestHandler = async (req, res, next) => {
   const header = req.get("Authorization") || "";
@@ -53,7 +54,7 @@ const requireAuth: express.RequestHandler = async (req, res, next) => {
     return jsonError(res, 401, "Missing Authorization token.");
   }
   try {
-    const decoded = await admin.auth().verifyIdToken(match[1]);
+    const decoded = await getAuth().verifyIdToken(match[1]);
     (req as AuthenticatedRequest).user = decoded;
     return next();
   } catch (error) {
@@ -175,7 +176,6 @@ app.post("/tracker/weeks/inject", requireAuth, async (req, res) => {
         const sets = Array.from({ length: setCount }, () => ({
           weight: 0,
           reps: ex.reps || 0,
-          rpe: 0,
           ...(ex.duration ? { duration: { value: ex.duration.value, unit: ex.duration.unit } } : {}),
         }));
         const entryId = uid("entry");
@@ -573,7 +573,9 @@ app.get("/users/me", requireAuth, async (req, res) => {
       userId,
       email,
       displayName,
-      photoURL
+      photoURL,
+      goalCalories,
+      macroPercents
     }`,
     { userId }
   );
@@ -588,16 +590,18 @@ app.post("/users/me", requireAuth, async (req, res) => {
   if (!userId) {
     return jsonError(res, 400, "User email not available.");
   }
-  const { displayName, photoURL } = req.body as UserProfileInput;
+  const { displayName, photoURL, goalCalories, macroPercents } = req.body as UserProfileInput;
   const incomingName = displayName || (req as AuthenticatedRequest).user?.name || "";
   const incomingPhoto = photoURL || (req as AuthenticatedRequest).user?.picture || "";
   const now = new Date().toISOString();
   const existing = await sanityClient.fetch(
-    `*[_type == "userProfile" && userId == $userId][0]{ _id, createdAt }`,
+    `*[_type == "userProfile" && userId == $userId][0]{ _id, createdAt, goalCalories, macroPercents }`,
     { userId }
   );
   const docId = existing?._id ?? uid("user");
   const createdAt = existing?.createdAt ?? now;
+  const nextGoalCalories = goalCalories ?? existing?.goalCalories ?? null;
+  const nextMacroPercents = macroPercents ?? existing?.macroPercents ?? null;
   await sanityClient.createOrReplace({
     _id: docId,
     _type: "userProfile",
@@ -605,6 +609,8 @@ app.post("/users/me", requireAuth, async (req, res) => {
     email: userId,
     displayName: incomingName,
     photoURL: incomingPhoto,
+    goalCalories: nextGoalCalories,
+    macroPercents: nextMacroPercents,
     createdAt,
     updatedAt: now,
   });
@@ -614,6 +620,8 @@ app.post("/users/me", requireAuth, async (req, res) => {
     email: userId,
     displayName: incomingName,
     photoURL: incomingPhoto,
+    goalCalories: nextGoalCalories,
+    macroPercents: nextMacroPercents,
   });
 });
 

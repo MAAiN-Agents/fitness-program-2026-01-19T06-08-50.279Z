@@ -29,6 +29,8 @@ const setEntry = defineType({
     defineField({ name: "weight", title: "Weight", type: "number" }),
     defineField({ name: "reps", title: "Reps", type: "number" }),
     defineField({ name: "rpe", title: "RPE", type: "number" }),
+    defineField({ name: "actualReps", title: "Actual Reps", type: "number" }),
+    defineField({ name: "actualDuration", title: "Actual Duration (min)", type: "number" }),
     defineField({ name: "duration", title: "Duration", type: "duration" }),
   ],
 });
@@ -320,6 +322,8 @@ const userProfile = defineType({
     defineField({ name: "email", title: "Email", type: "string" }),
     defineField({ name: "displayName", title: "Display Name", type: "string" }),
     defineField({ name: "photoURL", title: "Photo URL", type: "url" }),
+    defineField({ name: "goalCalories", title: "Goal Calories", type: "number" }),
+    defineField({ name: "macroPercents", title: "Macro Percents", type: "macroPercents" }),
     defineField({ name: "createdAt", title: "Created At", type: "datetime" }),
     defineField({ name: "updatedAt", title: "Updated At", type: "datetime" }),
   ],
