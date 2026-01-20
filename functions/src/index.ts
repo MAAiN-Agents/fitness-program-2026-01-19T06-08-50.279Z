@@ -3,6 +3,7 @@ import * as functions from "firebase-functions";
 import express from "express";
 import cors from "cors";
 import { createClient, type ClientConfig, type SanityClient } from "@sanity/client";
+import * as admin from "firebase-admin";
 
 type MacroPercents = { protein: number; carbs: number; fat: number };
 type SetEntry = { weight: number; reps: number; rpe: number; duration?: { value: number; unit: string } };
@@ -24,6 +25,9 @@ const sanityConfig: ClientConfig = {
 const sanityClient: SanityClient = createClient(sanityConfig);
 
 const app = express();
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
 const corsMiddleware = cors({
   origin: [
     "https://nomadic-fitness.web.app",
@@ -36,6 +40,25 @@ const corsMiddleware = cors({
   allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
 });
 app.options("*", corsMiddleware);
+app.use(corsMiddleware);
+app.use(express.json());
+
+type AuthenticatedRequest = express.Request & { user?: admin.auth.DecodedIdToken };
+
+const requireAuth: express.RequestHandler = async (req, res, next) => {
+  const header = req.get("Authorization") || "";
+  const match = header.match(/^Bearer (.+)$/);
+  if (!match) {
+    return jsonError(res, 401, "Missing Authorization token.");
+  }
+  try {
+    const decoded = await admin.auth().verifyIdToken(match[1]);
+    (req as AuthenticatedRequest).user = decoded;
+    return next();
+  } catch (error) {
+    return jsonError(res, 401, "Invalid or expired token.");
+  }
+};
 
 const uid = (prefix = "doc") => `${prefix}-${crypto.randomUUID()}`;
 const ref = (id: string) => ({ _type: "reference", _ref: id });
@@ -50,7 +73,7 @@ const computeMacroGoals = (calories: number, percents: MacroPercents) => ({
 const jsonError = (res: express.Response, status: number, message: string) =>
   res.status(status).json({ error: message });
 
-app.post("/tracker/weeks", async (req, res) => {
+app.post("/tracker/weeks", requireAuth, async (req, res) => {
   const { startDate, endDate, label } = req.body as WeekInput;
   if (!startDate || !endDate || !label) {
     return jsonError(res, 400, "startDate, endDate, and label are required.");
@@ -71,7 +94,7 @@ app.post("/tracker/weeks", async (req, res) => {
   });
 });
 
-app.post("/tracker/weeks/inject", async (req, res) => {
+app.post("/tracker/weeks/inject", requireAuth, async (req, res) => {
   const { planId, startDate, weekLabel } = req.body as InjectPlanRequest;
   if (!planId || !startDate || !weekLabel) {
     return jsonError(res, 400, "planId, startDate, and weekLabel are required.");
@@ -165,13 +188,13 @@ app.post("/tracker/weeks/inject", async (req, res) => {
   });
 });
 
-app.delete("/tracker/weeks/:weekId", async (req, res) => {
+app.delete("/tracker/weeks/:weekId", requireAuth, async (req, res) => {
   const { weekId } = req.params as { weekId: string };
   await sanityClient.delete(weekId);
   return res.status(204).send();
 });
 
-app.post("/tracker/weeks/:weekId/sessions", async (req, res) => {
+app.post("/tracker/weeks/:weekId/sessions", requireAuth, async (req, res) => {
   const { weekId } = req.params as { weekId: string };
   const { day, time, label } = req.body as SessionInput;
   if (!day || !time || !label) {
@@ -193,7 +216,7 @@ app.post("/tracker/weeks/:weekId/sessions", async (req, res) => {
   return res.status(201).json({ id: sessionId, day, time, label, entries: [] });
 });
 
-app.patch("/tracker/sessions/:sessionId", async (req, res) => {
+app.patch("/tracker/sessions/:sessionId", requireAuth, async (req, res) => {
   const { sessionId } = req.params as { sessionId: string };
   const patch = req.body as Partial<SessionInput>;
   const updated = await sanityClient.patch(sessionId).set(patch).commit();
@@ -206,7 +229,7 @@ app.patch("/tracker/sessions/:sessionId", async (req, res) => {
   });
 });
 
-app.delete("/tracker/sessions/:sessionId", async (req, res) => {
+app.delete("/tracker/sessions/:sessionId", requireAuth, async (req, res) => {
   const { sessionId } = req.params as { sessionId: string };
   const weeks = await sanityClient.fetch(`*[_type == "week" && references($sessionId)]{ _id }`, { sessionId });
   await Promise.all(
@@ -218,7 +241,7 @@ app.delete("/tracker/sessions/:sessionId", async (req, res) => {
   return res.status(204).send();
 });
 
-app.post("/tracker/sessions/:sessionId/entries", async (req, res) => {
+app.post("/tracker/sessions/:sessionId/entries", requireAuth, async (req, res) => {
   const { sessionId } = req.params as { sessionId: string };
   const { exerciseId, sets } = req.body as ExerciseEntryInput;
   if (!exerciseId || !sets) {
@@ -235,7 +258,7 @@ app.post("/tracker/sessions/:sessionId/entries", async (req, res) => {
   return res.status(201).json({ id: entryId, exerciseId, sets });
 });
 
-app.patch("/tracker/entries/:entryId", async (req, res) => {
+app.patch("/tracker/entries/:entryId", requireAuth, async (req, res) => {
   const { entryId } = req.params as { entryId: string };
   const patch = req.body as Partial<ExerciseEntryInput>;
   const updated = await sanityClient.patch(entryId).set({
@@ -249,13 +272,13 @@ app.patch("/tracker/entries/:entryId", async (req, res) => {
   });
 });
 
-app.delete("/tracker/entries/:entryId", async (req, res) => {
+app.delete("/tracker/entries/:entryId", requireAuth, async (req, res) => {
   const { entryId } = req.params as { entryId: string };
   await sanityClient.delete(entryId);
   return res.status(204).send();
 });
 
-app.post("/nutrition/days", async (req, res) => {
+app.post("/nutrition/days", requireAuth, async (req, res) => {
   const { date, calories, macroPercents } = req.body as NutritionDayInput;
   if (!date || calories === undefined || !macroPercents) {
     return jsonError(res, 400, "date, calories, and macroPercents are required.");
@@ -276,7 +299,7 @@ app.post("/nutrition/days", async (req, res) => {
   });
 });
 
-app.post("/nutrition/days/upsert", async (req, res) => {
+app.post("/nutrition/days/upsert", requireAuth, async (req, res) => {
   const { date, patch } = req.body as NutritionDayUpsert;
   if (!date || !patch) {
     return jsonError(res, 400, "date and patch are required.");
@@ -325,7 +348,7 @@ app.post("/nutrition/days/upsert", async (req, res) => {
   });
 });
 
-app.patch("/nutrition/days/:dayId", async (req, res) => {
+app.patch("/nutrition/days/:dayId", requireAuth, async (req, res) => {
   const { dayId } = req.params as { dayId: string };
   const { date, calories, macroPercents } = req.body as NutritionDayInput;
   if (!date || calories === undefined || !macroPercents) {
@@ -346,7 +369,7 @@ app.patch("/nutrition/days/:dayId", async (req, res) => {
   });
 });
 
-app.delete("/nutrition/days/:dayId", async (req, res) => {
+app.delete("/nutrition/days/:dayId", requireAuth, async (req, res) => {
   const { dayId } = req.params as { dayId: string };
   const meals = await sanityClient.fetch(`*[_type == "meal" && dayId._ref == $dayId]{ _id }`, { dayId });
   await Promise.all((meals || []).map((meal: { _id: string }) => sanityClient.delete(meal._id)));
@@ -354,7 +377,7 @@ app.delete("/nutrition/days/:dayId", async (req, res) => {
   return res.status(204).send();
 });
 
-app.post("/nutrition/days/:dayId/meals", async (req, res) => {
+app.post("/nutrition/days/:dayId/meals", requireAuth, async (req, res) => {
   const { dayId } = req.params as { dayId: string };
   const { type, macros } = req.body as MealInput;
   if (!type || !macros) {
@@ -371,7 +394,7 @@ app.post("/nutrition/days/:dayId/meals", async (req, res) => {
   return res.status(201).json({ id: mealId, dayId, type, macros });
 });
 
-app.patch("/nutrition/meals/:mealId", async (req, res) => {
+app.patch("/nutrition/meals/:mealId", requireAuth, async (req, res) => {
   const { mealId } = req.params as { mealId: string };
   const patch = req.body as MealInput;
   const updated = await sanityClient.patch(mealId).set(patch).commit();
@@ -383,7 +406,7 @@ app.patch("/nutrition/meals/:mealId", async (req, res) => {
   });
 });
 
-app.delete("/nutrition/meals/:mealId", async (req, res) => {
+app.delete("/nutrition/meals/:mealId", requireAuth, async (req, res) => {
   const { mealId } = req.params as { mealId: string };
   await sanityClient.delete(mealId);
   return res.status(204).send();

@@ -7,6 +7,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createClient } from "@sanity/client";
 import styled, { createGlobalStyle, css } from "styled-components";
+import { useFirebaseAuth } from "./auth/FirebaseAuthContext";
 
 const GA_ID = "G-EXCXY8B3LX";
 
@@ -269,6 +270,21 @@ const AppNav = styled.nav.attrs(dataComponent('AppNav'))`
     display: none;
   }
 `;
+const AuthControls = styled.div.attrs(dataComponent('AuthControls'))`
+  display: flex;
+  align-items: center;
+  gap: ${theme.spacing.sm};
+  flex: 0 0 auto;
+`;
+const AuthBadge = styled.span.attrs(dataComponent('AuthBadge'))`
+  font-size: 0.85rem;
+  color: ${theme.colors.navText};
+  opacity: 0.9;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;
 const NavTab = styled.button.attrs((props: NavButtonProps) => ({
   'data-component': 'NavTab',
   'aria-label': props['aria-label'],
@@ -303,6 +319,23 @@ const Card = styled.div.attrs(dataComponent('Card'))<DataComponentProps>`
   padding: ${theme.spacing.md};
   margin-bottom: ${theme.spacing.md};
 `;
+const AuthGateCard = styled(Card).attrs(dataComponent('AuthGateCard'))`
+  text-align: center;
+  padding: ${theme.spacing.lg};
+`;
+const AuthGateTitle = styled.h3.attrs(dataComponent('AuthGateTitle'))`
+  margin: 0 0 ${theme.spacing.sm} 0;
+  color: ${theme.colors.primary};
+`;
+const AuthGateText = styled.p.attrs(dataComponent('AuthGateText'))`
+  margin: 0 0 ${theme.spacing.md} 0;
+  color: ${theme.colors.textSecondary};
+`;
+const AuthHint = styled.p.attrs(dataComponent('AuthHint'))`
+  margin: ${theme.spacing.sm} 0 0 0;
+  color: ${theme.colors.textSecondary};
+  font-size: 0.85rem;
+`;
 const SectionTitle = styled.h2.attrs(() => ({
   'data-component': 'SectionTitle',
 } as Record<string, unknown>))`
@@ -327,6 +360,17 @@ const Button = styled.button.attrs(dataComponent('Button'))<ButtonProps>`
     color: #fff;
     outline: 2px solid ${theme.colors.accent2};
   }
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+`;
+const AuthButton = styled(Button).attrs(dataComponent('AuthButton'))`
+  margin: 0;
+  min-width: unset;
+  padding: 6px 12px;
+  font-size: 0.8rem;
 `;
 const Input = styled.input.attrs(dataComponent('Input'))`
   width: 100%;
@@ -908,10 +952,15 @@ function useCMS() {
   };
 }
 
-function useAPI() {
+function useAPI(getIdToken?: () => Promise<string | null>) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<unknown | null>(null);
   const baseUrl = `${process.env.REACT_APP_API_BASE || ""}/api`;
+  const getAuthHeaders = async (): Promise<Record<string, string>> => {
+    if (!getIdToken) return {};
+    const token = await getIdToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
 
   async function run<T>(fn: () => Promise<T>): Promise<T | null> {
     try {
@@ -931,9 +980,10 @@ function useAPI() {
     error,
     upsertNutritionDay: ({ date, patch }: UpsertNutritionPayload) =>
       run(async () => {
+        const authHeaders = await getAuthHeaders();
         const response = await fetch(`${baseUrl}/nutrition/days/upsert`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...authHeaders },
           body: JSON.stringify({ date, patch }),
         });
         if (!response.ok) {
@@ -943,9 +993,10 @@ function useAPI() {
       }),
     injectPlanToWeek: ({ planId, startDate, weekLabel }: InjectPlanPayload) =>
       run(async () => {
+        const authHeaders = await getAuthHeaders();
         const response = await fetch(`${baseUrl}/tracker/weeks/inject`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...authHeaders },
           body: JSON.stringify({ planId, startDate, weekLabel }),
         });
         if (!response.ok) {
@@ -1038,7 +1089,10 @@ function roundToTenth(value: number): number {
 // ---- APP ----
 function App() {
   const cms = useCMS();
-  const api = useAPI();
+  const { user, loading: authLoading, signInWithGoogle, signOut, hasConfig, getIdToken } = useFirebaseAuth();
+  const api = useAPI(getIdToken);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const isAuthed = Boolean(user);
 
   // Navigation state
   const [tab, setTab] = useState(0); // 0:Tracker, 1:Nutrition, 2:Plans, 3:Library, 4:Promo
@@ -1082,6 +1136,7 @@ function App() {
   );
 
   const refreshWeeks = async (): Promise<Week[] | null> => {
+    if (!isAuthed) return null;
     const weekData = await cms.getWeeks();
     if (weekData) {
       setWeeks(weekData);
@@ -1093,6 +1148,7 @@ function App() {
   };
 
   const refreshNutritionDays = async (): Promise<NutritionDay[] | null> => {
+    if (!isAuthed) return null;
     const nutritionData = await cms.getNutritionDays();
     if (nutritionData) {
       setNutritionDays(nutritionData);
@@ -1122,19 +1178,38 @@ function App() {
   useEffect(() => {
     let active = true;
     Promise.all([
-      cms.getWeeks(),
-      cms.getNutritionDays(),
       cms.getPlans(),
       cms.getExercises(),
       cms.getAffiliatePromotions(),
-    ]).then(([weekData, nutritionData, planData, exerciseData, promoData]) => {
+    ]).then(([planData, exerciseData, promoData]) => {
       if (!active) return;
-      setWeeks(weekData ?? []);
-      setNutritionDays(nutritionData ?? []);
       setPlans(planData ?? []);
       setExerciseLibrary(exerciseData ?? []);
       setAffiliatePromotions(promoData ?? []);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
+  useEffect(() => {
+    let active = true;
+    if (!isAuthed) {
+      setWeeks([]);
+      setNutritionDays([]);
+      setSelectedWeek("");
+      setInjectWeekLabel("Week 1");
+      return () => {
+        active = false;
+      };
+    }
+    Promise.all([
+      cms.getWeeks(),
+      cms.getNutritionDays(),
+    ]).then(([weekData, nutritionData]) => {
+      if (!active) return;
+      setWeeks(weekData ?? []);
+      setNutritionDays(nutritionData ?? []);
       if (weekData && weekData[0]) {
         setSelectedWeek(weekData[0].id);
       }
@@ -1147,7 +1222,7 @@ function App() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [isAuthed]);
 
   const nutritionDates = new Set(nutritionDays.map(d => d.date));
   const sortedNutritionDates = [...nutritionDays]
@@ -1228,6 +1303,10 @@ function App() {
   const injectWeekLabelOptions = Array.from({ length: 4 }, (_, i) => `Week ${weeks.length + i + 1}`);
   const handleConfirmInjectPlan = async () => {
     if (!injectPlan || !injectMondayDate) return;
+    if (!isAuthed) {
+      setAuthError("Sign in to inject plans into your tracker.");
+      return;
+    }
     const startDate = injectMondayDate;
     const result = await api.injectPlanToWeek({
       planId: injectPlan.id,
@@ -1243,6 +1322,41 @@ function App() {
     setInjectModalOpen(false);
     setInjectPlan(null);
   };
+
+  const handleSignIn = async () => {
+    setAuthError(null);
+    try {
+      await signInWithGoogle();
+    } catch (error) {
+      setAuthError("Google sign-in failed. Please try again.");
+    }
+  };
+
+  const handleSignOut = async () => {
+    setAuthError(null);
+    try {
+      await signOut();
+    } catch (error) {
+      setAuthError("Sign-out failed. Please try again.");
+    }
+  };
+
+  const renderAuthGate = (title: string, message: string) => (
+    <Section data-component="AuthGateSection">
+      <SectionTitle>{title}</SectionTitle>
+      <AuthGateCard>
+        <AuthGateTitle>Sign in required</AuthGateTitle>
+        <AuthGateText>{message}</AuthGateText>
+        {!hasConfig && (
+          <AuthGateText>Missing Firebase config in the environment.</AuthGateText>
+        )}
+        <Button onClick={handleSignIn} disabled={!hasConfig || authLoading}>
+          Continue with Google
+        </Button>
+        {authError && <AuthGateText>{authError}</AuthGateText>}
+      </AuthGateCard>
+    </Section>
+  );
 
   const renderCalendarDrawer = () => (
     <CalendarDrawerOverlay onClick={() => setCalendarOpen(false)}>
@@ -1302,9 +1416,25 @@ function App() {
 
   // ---- Tracker Section ----
   function renderTracker() {
+    if (authLoading) {
+      return (
+        <Section data-component="FitnessTracker">
+          <SectionTitle>Fitness Tracker</SectionTitle>
+          <Card data-component="AuthLoadingCard">Checking sign-in status...</Card>
+        </Section>
+      );
+    }
+    if (!isAuthed) {
+      return renderAuthGate("Fitness Tracker", "Sign in to view and update your training weeks.");
+    }
     const week = weeks.find(w => w.id === selectedWeek);
     if (!week) {
-      return null;
+      return (
+        <Section data-component="FitnessTracker">
+          <SectionTitle>Fitness Tracker</SectionTitle>
+          <Card data-component="EmptyWeekCard">No weeks yet. Inject a plan to get started.</Card>
+        </Section>
+      );
     }
     return (
       <Section data-component="FitnessTracker">
@@ -1585,6 +1715,17 @@ function App() {
 
   // ---- Nutrition Section ----
   function renderNutrition() {
+    if (authLoading) {
+      return (
+        <Section data-component="NutritionTracker">
+          <SectionTitle>Nutrition</SectionTitle>
+          <Card data-component="AuthLoadingCard">Checking sign-in status...</Card>
+        </Section>
+      );
+    }
+    if (!isAuthed) {
+      return renderAuthGate("Nutrition", "Sign in to view and update your nutrition logs.");
+    }
     const selectedNutritionDay = nutritionDays.find(d => d.date === selectedDate);
     const nutritionBase = selectedNutritionDay || {
       calories: 0,
@@ -2084,6 +2225,7 @@ function App() {
               </PlanModalBody>
               <Button
                 data-component="InjectPlanButton"
+                disabled={!isAuthed || authLoading}
                 onClick={() => {
                   setInjectPlan(selectedPlan);
                   setInjectWeekLabel(`Week ${weeks.length + 1}`);
@@ -2093,6 +2235,7 @@ function App() {
               >
                 Inject Plan
               </Button>
+              {!isAuthed && <AuthHint>Sign in to inject this plan into your tracker.</AuthHint>}
               <Button data-component="DownloadPlanButton" variant="secondary" onClick={() => alert('Download as PDF/JSON')}>Download</Button>
               <Button data-component="ClosePlanModalButton" variant="secondary" onClick={() => setSelectedPlan(null)}>Close</Button>
             </PlanModal>
@@ -2130,8 +2273,9 @@ function App() {
               </select>
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
                 <Button variant="secondary" onClick={() => setInjectModalOpen(false)}>Cancel</Button>
-                <Button onClick={handleConfirmInjectPlan}>Inject</Button>
+                <Button onClick={handleConfirmInjectPlan} disabled={!isAuthed || authLoading}>Inject</Button>
               </div>
+              {!isAuthed && <AuthHint>Sign in to inject plans into your tracker.</AuthHint>}
             </InjectModal>
           </ModalOverlay>
         )}
@@ -2309,6 +2453,16 @@ function App() {
           <NavTab active={tab === 3} onClick={() => setTab(3)} aria-label="Library">Library</NavTab>
           <NavTab active={tab === 4} onClick={() => setTab(4)} aria-label="Promo">Promo</NavTab>
         </AppNav>
+        <AuthControls>
+          {isAuthed ? (
+            <>
+              <AuthBadge>{user?.displayName || user?.email || "Signed in"}</AuthBadge>
+              <AuthButton variant="secondary" onClick={handleSignOut}>Sign out</AuthButton>
+            </>
+          ) : (
+            <AuthButton onClick={handleSignIn} disabled={!hasConfig || authLoading}>Sign in</AuthButton>
+          )}
+        </AuthControls>
         <CalendarOpenButton
           variant="secondary"
           onClick={() => {
