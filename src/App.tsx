@@ -8,7 +8,11 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createClient } from "@sanity/client";
 import styled, { createGlobalStyle, css } from "styled-components";
 import { useFirebaseAuth } from "./auth/FirebaseAuthContext";
-import FitnessProgressTab, { type ProgressEntry } from "./components/tabs/FitnessProgressTab";
+import FitnessProgressTab, {
+  type ProgressEntry,
+  type TrackerSummary,
+  type NutritionSummary,
+} from "./components/tabs/FitnessProgressTab";
 
 const GA_ID = "G-EXCXY8B3LX";
 
@@ -1507,6 +1511,82 @@ function App() {
   const exerciseById = useMemo<Record<string, Exercise>>(
     () => Object.fromEntries(exerciseLibrary.map(ex => [ex.id, ex])),
     [exerciseLibrary]
+  );
+  const nutritionSummaryByDate = useMemo(() => {
+    const summaryMap = new Map<string, NutritionSummary>();
+    nutritionDays.forEach(day => {
+      const meals = Array.isArray(day.meals) ? day.meals : [];
+      const totals = meals.reduce(
+        (acc, meal) => ({
+          protein: acc.protein + (Number(meal.macros.protein) || 0),
+          carbs: acc.carbs + (Number(meal.macros.carbs) || 0),
+          fat: acc.fat + (Number(meal.macros.fat) || 0),
+        }),
+        { protein: 0, carbs: 0, fat: 0 }
+      );
+      summaryMap.set(day.date, {
+        calories: Number(day.calories) || 0,
+        protein: totals.protein,
+        carbs: totals.carbs,
+        fat: totals.fat,
+      });
+    });
+    return summaryMap;
+  }, [nutritionDays]);
+  const trackerSummaryByDate = useMemo(() => {
+    const summaryMap = new Map<string, TrackerSummary>();
+    weeks.forEach(week => {
+      const weekStart = parseDate(week.startDate);
+      daysOfWeek.forEach((day, index) => {
+        const dayDate = addDays(weekStart, index);
+        const dateKey = formatDate(dayDate);
+        const daySessions = (week.sessions || []).filter(session => session.day === day);
+        if (daySessions.length === 0) {
+          return;
+        }
+        const sessionsByTime = {
+          AM: daySessions.filter(session => session.time === "AM").length,
+          PM: daySessions.filter(session => session.time === "PM").length,
+        };
+        const sessions = daySessions.map(session => ({
+          label: stripSessionTime(session.label) || session.label,
+          time: session.time,
+          exercises: session.entries.map(entry => {
+            const exercise = exerciseById[entry.exerciseId];
+            return {
+              title: exercise?.title || "Unknown Exercise",
+              type: exercise?.type || "Unknown",
+              sets: entry.sets.map(set => ({
+                weight: set.weight,
+                reps: set.reps,
+                rpe: set.rpe,
+                actualReps: set.actualReps,
+                actualDuration: set.actualDuration,
+                durationMinutes: durationToMinutes(set.duration),
+              })),
+            };
+          }),
+        }));
+        const totalExercises = sessions.reduce((total, session) => total + session.exercises.length, 0);
+        summaryMap.set(dateKey, {
+          dayLabel: day,
+          totalSessions: daySessions.length,
+          totalExercises,
+          sessionsByTime,
+          sessions,
+          weekLabel: week.label,
+        });
+      });
+    });
+    return summaryMap;
+  }, [weeks, exerciseById]);
+  const progressEntriesWithSummary = useMemo(
+    () => progressEntries.map(entry => ({
+      ...entry,
+      trackerSummary: trackerSummaryByDate.get(entry.date) ?? null,
+      nutritionSummary: nutritionSummaryByDate.get(entry.date) ?? null,
+    })),
+    [progressEntries, trackerSummaryByDate, nutritionSummaryByDate]
   );
 
   const refreshWeeks = async (): Promise<Week[] | null> => {
@@ -3109,9 +3189,14 @@ function App() {
     return (
       <FitnessProgressTab
         theme={theme}
-        entries={progressEntries}
+        entries={progressEntriesWithSummary}
         loading={progressLoading || api.loading}
         onUpload={handleProgressUpload}
+        qrCodeUrl={
+          affiliatePromotions[0]?.url
+            ? `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(affiliatePromotions[0].url)}`
+            : null
+        }
       />
     );
   }
