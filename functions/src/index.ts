@@ -41,6 +41,7 @@ const corsMiddleware = cors({
     "https://nomadic-fitness.web.app",
     "https://nomadic-fitness.firebaseapp.com",
     "http://localhost:3000",
+    "http://localhost:3002",
   ],
   credentials: true,
   methods: ["POST", "GET", "PUT", "DELETE", "OPTIONS", "HEAD"],

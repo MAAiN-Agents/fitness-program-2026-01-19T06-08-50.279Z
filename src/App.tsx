@@ -415,6 +415,35 @@ const ProfileSummaryButton = styled.button.attrs(dataComponent('ProfileSummaryBu
     outline: 2px solid ${theme.colors.accent};
   }
 `;
+const ProfileSeamlessCard = styled.button.attrs(dataComponent('ProfileSeamlessCard'))`
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border-radius: ${theme.radii.card};
+  border: 1px solid ${theme.colors.border};
+  padding: ${theme.spacing.md};
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  color: ${theme.colors.primary};
+  margin-top: ${theme.spacing.sm};
+  &:hover, &:focus {
+    border-color: ${theme.colors.accent2};
+    outline: 2px solid ${theme.colors.accent2};
+  }
+`;
+const ProfileSeamlessCount = styled.span.attrs(dataComponent('ProfileSeamlessCount'))`
+  min-width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: ${theme.colors.accent};
+  color: ${theme.colors.text};
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+`;
 const ProfileMenuLabel = styled.span.attrs(dataComponent('ProfileMenuLabel'))`
   max-width: 140px;
   overflow: hidden;
@@ -743,7 +772,7 @@ const PlanPdfGrid = styled.div.attrs(dataComponent('PlanPdfGrid'))`
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: ${theme.spacing.md};
 `;
-const PlanPdfCard = styled.button.attrs(dataComponent('PlanPdfCard'))`
+const PlanPdfCard = styled.div.attrs(dataComponent('PlanPdfCard'))`
   background: ${theme.colors.background};
   border: 1px solid ${theme.colors.border};
   border-radius: ${theme.radii.card};
@@ -773,27 +802,6 @@ const PlanPdfBadge = styled.span.attrs(dataComponent('PlanPdfBadge'))`
   letter-spacing: 0.08em;
   background: rgba(67, 170, 139, 0.16);
   color: ${theme.colors.success};
-`;
-const PlanPdfBreadcrumbs = styled.div.attrs(dataComponent('PlanPdfBreadcrumbs'))`
-  display: flex;
-  align-items: center;
-  gap: ${theme.spacing.xs};
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: ${theme.colors.textSecondary};
-`;
-const PlanPdfPreview = styled.div.attrs(dataComponent('PlanPdfPreview'))`
-  border-radius: ${theme.radii.card};
-  border: 1px solid ${theme.colors.border};
-  background: ${theme.colors.background};
-  min-height: 200px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: ${theme.spacing.md};
-  text-align: center;
-  color: ${theme.colors.textSecondary};
 `;
 const StripeOverlay = styled(ModalOverlay).attrs(dataComponent('StripeOverlay'))`
   background: rgba(0, 0, 0, 0.9);
@@ -1632,12 +1640,12 @@ function App() {
   const [injectPlan, setInjectPlan] = useState<Plan | null>(null);
   const [injectWeekLabel, setInjectWeekLabel] = useState("Week 1");
   const [injectMondayDate, setInjectMondayDate] = useState(() => formatDate(getUpcomingMondays(1)[0]));
-  const [pdfModalOpen, setPdfModalOpen] = useState(false);
-  const [pdfPlan, setPdfPlan] = useState<Plan | null>(null);
-  const [selectedPlanPdf, setSelectedPlanPdf] = useState<PlanPdf | null>(null);
+  const [purchasedPdfsModalOpen, setPurchasedPdfsModalOpen] = useState(false);
   const [stripeModalOpen, setStripeModalOpen] = useState(false);
   const [pendingPurchasePdf, setPendingPurchasePdf] = useState<PlanPdf | null>(null);
   const [processedStripeSession, setProcessedStripeSession] = useState<string | null>(null);
+  const [pdfDetailOpen, setPdfDetailOpen] = useState(false);
+  const [activePdfDetail, setActivePdfDetail] = useState<PlanPdf | null>(null);
 
   const [plans, setPlans] = useState<Plan[]>([]);
   const [exerciseLibrary, setExerciseLibrary] = useState<Exercise[]>([]);
@@ -1728,6 +1736,7 @@ function App() {
     () => new Set((userProfile?.purchasedPdfs || []).map(pdf => pdf.id)),
     [userProfile]
   );
+  const purchasedPdfs = userProfile?.purchasedPdfs || [];
 
   const refreshWeeks = async (): Promise<Week[] | null> => {
     if (!isAuthed) return null;
@@ -1822,6 +1831,7 @@ function App() {
       .then(profile => {
         if (profile) {
           setUserProfile(profile as UserProfile);
+          setPurchasedPdfsModalOpen(true);
         }
       })
       .finally(() => {
@@ -2056,11 +2066,6 @@ function App() {
     setInjectPlan(null);
   };
 
-  const handleOpenPlanPdfModal = () => {
-    setPdfModalOpen(true);
-    setSelectedPlanPdf(null);
-  };
-
   const handleStartPdfPurchase = (pdf: PlanPdf) => {
     if (!pdf.id) return;
     localStorage.setItem("pending_plan_pdf_id", pdf.id);
@@ -2078,6 +2083,16 @@ function App() {
   const handleCloseStripeModal = () => {
     setStripeModalOpen(false);
     setPendingPurchasePdf(null);
+  };
+
+  const handleOpenPdfDetail = (pdf: PlanPdf) => {
+    setActivePdfDetail(pdf);
+    setPdfDetailOpen(true);
+  };
+
+  const handleClosePdfDetail = () => {
+    setPdfDetailOpen(false);
+    setActivePdfDetail(null);
   };
 
   const handleSignIn = async () => {
@@ -2323,6 +2338,18 @@ function App() {
                   </div>
                 </div>
               </ProfileSummaryButton>
+              <ProfileSeamlessCard
+                data-component="PurchasedPdfsCard"
+                onClick={() => setPurchasedPdfsModalOpen(true)}
+              >
+                <div>
+                  <div style={{ fontWeight: 700 }}>Purchased PDFs</div>
+                  <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>
+                    Tap to view your downloads
+                  </div>
+                </div>
+                <ProfileSeamlessCount>{purchasedPdfs.length}</ProfileSeamlessCount>
+              </ProfileSeamlessCard>
               <ProfileFormRow>
                 <Button onClick={() => setProfileDetailsOpen(prev => !prev)}>
                   {profileDetailsOpen ? "Hide profile details" : "Edit profile"}
@@ -3413,7 +3440,6 @@ function App() {
   // ---- Plans Section ----
   function renderPlans() {
     const plansForCategory = plans.filter(p => p.category === planCategory);
-    const planPdfs = pdfPlan?.pdfs ?? [];
     return (
       <Section data-component="PlanBrowser" style={{ minHeight: "80vh" }}>
         <SectionTitle>Preset Workout Plans</SectionTitle>
@@ -3451,17 +3477,94 @@ function App() {
                 >
                   View
                 </Button>
-                <Button
-                  data-component="DownloadPlanPdfButton"
-                  variant="secondary"
-                  onClick={() => {
-                    setPdfPlan(plan);
-                    handleOpenPlanPdfModal();
-                  }}
-                >
-                  Download PDF
-                </Button>
               </div>
+            </div>
+            <div style={{ marginTop: theme.spacing.sm }}>
+              {(plan.pdfs || []).length === 0 ? (
+                <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>
+                  No PDFs available yet.
+                </div>
+              ) : (
+                <>
+                  <PlanFilterLabel>Downloadable PDFs</PlanFilterLabel>
+                  <PlanPdfGrid>
+                    {(plan.pdfs || []).map(pdf => {
+                      const isOwned = purchasedPdfIds.has(pdf.id);
+                      return (
+                        <PlanPdfCard key={pdf.id} role="group" aria-label={pdf.title}>
+                          <div
+                            style={{
+                              borderRadius: theme.radii.input,
+                              overflow: "hidden",
+                              background: theme.colors.card,
+                              border: `1px solid ${theme.colors.border}`,
+                              height: 120,
+                            }}
+                          >
+                            {pdf.previewUrl ? (
+                              <img
+                                src={pdf.previewUrl}
+                                alt={`${pdf.title} preview`}
+                                style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+                              />
+                            ) : (
+                              <div
+                                style={{
+                                  width: "100%",
+                                  height: "100%",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  fontSize: 12,
+                                  color: theme.colors.textSecondary,
+                                }}
+                              >
+                                No preview
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ fontWeight: 700 }}>{pdf.format || pdf.title}</div>
+                          <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>{pdf.title}</div>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                            {isOwned ? (
+                              <Button
+                                as="a"
+                                data-component="PlanPdfDownloadButton"
+                                href={pdf.fileUrl || undefined}
+                                target="_blank"
+                                rel="noreferrer"
+                                variant="secondary"
+                                style={{ textDecoration: "none" }}
+                              >
+                                Download
+                              </Button>
+                            ) : (
+                              <Button
+                                data-component="PlanPdfBuyButton"
+                                onClick={() => handleStartPdfPurchase(pdf)}
+                              >
+                                Buy
+                              </Button>
+                            )}
+                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              {isOwned && <PlanPdfBadge>Owned</PlanPdfBadge>}
+                              <IconButton
+                                data-component="PlanPdfDetailButton"
+                                variant="secondary"
+                                aria-label="View PDF details"
+                                onClick={() => handleOpenPdfDetail(pdf)}
+                                title="View PDF details"
+                              >
+                                ⓘ
+                              </IconButton>
+                            </div>
+                          </div>
+                        </PlanPdfCard>
+                      );
+                    })}
+                  </PlanPdfGrid>
+                </>
+              )}
             </div>
           </Card>
         ))}
@@ -3469,9 +3572,6 @@ function App() {
         {selectedPlan && (
           <ModalOverlay onClick={() => {
             setSelectedPlan(null);
-            setPdfModalOpen(false);
-            setSelectedPlanPdf(null);
-            setPdfPlan(null);
           }}>
             <PlanModal onClick={e => e.stopPropagation()}>
               <SectionTitle>{selectedPlan.title}</SectionTitle>
@@ -3655,133 +3755,16 @@ function App() {
               </LoadingButton>
               {!isAuthed && <AuthHint>Sign in to inject this plan into your tracker.</AuthHint>}
               <Button
-                data-component="DownloadPlanPdfButton"
-                variant="secondary"
-                onClick={() => {
-                  setPdfPlan(selectedPlan);
-                  handleOpenPlanPdfModal();
-                }}
-              >
-                Download PDF
-              </Button>
-              <Button
                 data-component="ClosePlanModalButton"
                 variant="secondary"
                 onClick={() => {
                   setSelectedPlan(null);
-                  setPdfModalOpen(false);
-                  setSelectedPlanPdf(null);
-                  setPdfPlan(null);
                 }}
               >
                 Close
               </Button>
             </PlanModal>
           </ModalOverlay>
-        )}
-        {pdfModalOpen && pdfPlan && (
-          <PlanPdfOverlay onClick={() => {
-            setPdfModalOpen(false);
-            setSelectedPlanPdf(null);
-            setPdfPlan(null);
-          }}>
-            <PlanPdfModal onClick={e => e.stopPropagation()}>
-              <SectionTitle>{pdfPlan.title} PDFs</SectionTitle>
-              {selectedPlanPdf ? (
-                <>
-                  <PlanPdfBreadcrumbs>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedPlanPdf(null)}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        color: theme.colors.textSecondary,
-                        cursor: "pointer",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.08em",
-                        fontSize: "0.75rem",
-                      }}
-                    >
-                      PDF Grid
-                    </button>
-                    <span>/</span>
-                    <span>{selectedPlanPdf.format || selectedPlanPdf.title}</span>
-                  </PlanPdfBreadcrumbs>
-                  <PlanPdfPreview>
-                    {selectedPlanPdf.previewUrl ? (
-                      <img
-                        src={selectedPlanPdf.previewUrl}
-                        alt={`${selectedPlanPdf.title} preview`}
-                        style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: theme.radii.card }}
-                      />
-                    ) : (
-                      <div>
-                        <div style={{ fontWeight: 700, marginBottom: 6 }}>{selectedPlanPdf.title}</div>
-                        <div>No preview available yet.</div>
-                      </div>
-                    )}
-                  </PlanPdfPreview>
-                  <div style={{ display: "grid", gap: 8 }}>
-                    <div style={{ fontWeight: 700 }}>{selectedPlanPdf.format || selectedPlanPdf.title}</div>
-                    {selectedPlanPdf.description && (
-                      <div style={{ color: theme.colors.textSecondary, fontSize: 14 }}>
-                        {selectedPlanPdf.description}
-                      </div>
-                    )}
-                    {purchasedPdfIds.has(selectedPlanPdf.id) ? (
-                      <Button
-                        as="a"
-                        data-component="PlanPdfDownloadButton"
-                        href={selectedPlanPdf.fileUrl || undefined}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{ textDecoration: "none" }}
-                      >
-                        Download PDF
-                      </Button>
-                    ) : (
-                      <Button
-                        data-component="PlanPdfBuyButton"
-                        onClick={() => handleStartPdfPurchase(selectedPlanPdf)}
-                      >
-                        Buy PDF
-                      </Button>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <>
-                  {planPdfs.length === 0 ? (
-                    <div style={{ color: theme.colors.textSecondary }}>
-                      No PDFs uploaded for this plan yet.
-                    </div>
-                  ) : (
-                    <PlanPdfGrid>
-                      {planPdfs.map(pdf => (
-                        <PlanPdfCard key={pdf.id} type="button" onClick={() => setSelectedPlanPdf(pdf)}>
-                          <div style={{ fontWeight: 700 }}>{pdf.format || pdf.title}</div>
-                          <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>{pdf.title}</div>
-                          {purchasedPdfIds.has(pdf.id) && <PlanPdfBadge>Owned</PlanPdfBadge>}
-                        </PlanPdfCard>
-                      ))}
-                    </PlanPdfGrid>
-                  )}
-                </>
-              )}
-              <Button
-                data-component="PlanPdfCloseButton"
-                variant="secondary"
-                onClick={() => {
-                  setPdfModalOpen(false);
-                  setSelectedPlanPdf(null);
-                  setPdfPlan(null);
-                }}
-              >
-                Close
-              </Button>
-            </PlanPdfModal>
-          </PlanPdfOverlay>
         )}
         {injectModalOpen && (
           <ModalOverlay onClick={() => setInjectModalOpen(false)}>
@@ -4042,6 +4025,124 @@ function App() {
             <Button variant="secondary" onClick={handleCloseStripeModal}>Cancel</Button>
           </StripeModalCard>
         </StripeOverlay>
+      )}
+      {pdfDetailOpen && activePdfDetail && (
+        <ModalOverlay onClick={handleClosePdfDetail}>
+          <Modal onClick={e => e.stopPropagation()}>
+            <SectionTitle>{activePdfDetail.format || activePdfDetail.title}</SectionTitle>
+            <div style={{ display: "flex", gap: theme.spacing.md, marginBottom: theme.spacing.md }}>
+              <div
+                style={{
+                  borderRadius: theme.radii.card,
+                  overflow: "hidden",
+                  border: `1px solid ${theme.colors.border}`,
+                  background: theme.colors.background,
+                  width: 160,
+                  height: 220,
+                  flex: "0 0 auto",
+                }}
+              >
+                {activePdfDetail.previewUrl ? (
+                  <img
+                    src={activePdfDetail.previewUrl}
+                    alt={`${activePdfDetail.title} preview`}
+                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 12,
+                      color: theme.colors.textSecondary,
+                    }}
+                  >
+                    No preview available.
+                  </div>
+                )}
+              </div>
+              <div style={{ display: "grid", gap: 8, alignContent: "start" }}>
+                <div style={{ fontWeight: 700 }}>{activePdfDetail.title}</div>
+                <div style={{ fontSize: 14, color: theme.colors.textSecondary }}>
+                  {activePdfDetail.description || "No description available."}
+                </div>
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between" }}>
+              {purchasedPdfIds.has(activePdfDetail.id) ? (
+                <Button
+                  as="a"
+                  data-component="PlanPdfDownloadButton"
+                  href={activePdfDetail.fileUrl || undefined}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ textDecoration: "none" }}
+                >
+                  Download PDF
+                </Button>
+              ) : (
+                <Button
+                  data-component="PlanPdfBuyButton"
+                  onClick={() => handleStartPdfPurchase(activePdfDetail)}
+                >
+                  Buy PDF
+                </Button>
+              )}
+              <Button variant="secondary" onClick={handleClosePdfDetail}>
+                Close
+              </Button>
+            </div>
+          </Modal>
+        </ModalOverlay>
+      )}
+      {purchasedPdfsModalOpen && (
+        <PlanPdfOverlay onClick={() => setPurchasedPdfsModalOpen(false)}>
+          <PlanPdfModal onClick={e => e.stopPropagation()}>
+            <SectionTitle>Your Purchased PDFs</SectionTitle>
+            {purchasedPdfs.length === 0 ? (
+              <div style={{ color: theme.colors.textSecondary }}>
+                No purchased PDFs yet.
+              </div>
+            ) : (
+              <PlanPdfGrid>
+                {purchasedPdfs.map(pdf => (
+                  <PlanPdfCard
+                    key={pdf.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      if (pdf.fileUrl) {
+                        window.open(pdf.fileUrl, "_blank", "noreferrer");
+                      }
+                    }}
+                    onKeyDown={event => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        if (pdf.fileUrl) {
+                          window.open(pdf.fileUrl, "_blank", "noreferrer");
+                        }
+                      }
+                    }}
+                  >
+                    <div style={{ fontWeight: 700 }}>{pdf.format || pdf.title}</div>
+                    <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>{pdf.title}</div>
+                    <PlanPdfBadge>Owned</PlanPdfBadge>
+                  </PlanPdfCard>
+                ))}
+              </PlanPdfGrid>
+            )}
+            <Button
+              data-component="PurchasedPdfsCloseButton"
+              variant="secondary"
+              onClick={() => setPurchasedPdfsModalOpen(false)}
+            >
+              Close
+            </Button>
+          </PlanPdfModal>
+        </PlanPdfOverlay>
       )}
       {calendarOpen && renderCalendarDrawer()}
       {profileOpen && renderProfileDrawer()}

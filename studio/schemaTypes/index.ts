@@ -286,9 +286,41 @@ const exercise = defineType({
   title: "Exercise",
   type: "document",
   fields: [
-    defineField({ name: "title", title: "Title", type: "string" }),
-    defineField({ name: "description", title: "Description", type: "string" }),
+    defineField({ name: "title", title: "Title", type: "string" }), // name
+    defineField({ name: "isCustom", title: "Is this custom? (Did a user create this?)", type: "string" }), // name
     defineField({ name: "image", title: "Image", type: "url" }),
+    defineField({ name: "description", title: "Description", type: "string" }), // instructions augmented
+    defineField({ name: "safety", title: "Safety", type: "string" }),
+    defineField({ name: "muscle", title: "Muscle", type: "string" }),
+     defineField({
+      name: "equipments",
+      title: "Equipments",
+      type: "array",
+      of: [{ type: "string" }],
+    }),
+    defineField({
+      name: "type",
+      title: "difficulty",
+      type: "string",
+      options: {
+        list: [
+          { title: "Beginner", value: "beginner" },
+          { title: "Intermediate", value: "intermediate" },
+          { title: "Expert", value: "expert" },
+        ],
+      },
+    }),
+    defineField({
+      name: "source",
+      title: "Source of Exercise",
+      type: "string",
+      options: {
+        list: [
+          { title: "API", value: "api" },
+          { title: "custom", value: "custom" },
+        ],
+      },
+    }),
     defineField({
       name: "type",
       title: "Type",
@@ -298,9 +330,13 @@ const exercise = defineType({
           { title: "Strength", value: "Strength" },
           { title: "Cardio", value: "Cardio" },
           { title: "Yoga", value: "Yoga" },
-          { title: "Warmup", value: "Warmup" },
-          { title: "Core", value: "Core" },
-          { title: "Conditioning", value: "Conditioning" },
+          { title: "Warmup", value: "Warmup" }, // stretching
+          { title: "Core", value: "Core" }, // plyometrics
+          { title: "Olympic Weightlifting", value: "OlympicWeightLifting" },
+          // { title: "Plyometrics", value: "Plyometrics" },
+          { title: "Power Lifting", value: "PowerLifting" },
+          // { title: "Stretching", value: "Stretching" },
+          { title: "Strongman", value: "Strongman" },
         ],
       },
     }),
@@ -311,7 +347,6 @@ const exercise = defineType({
       options: {
         list: [
           { title: "10 min quick session", value: "10 min quick session" },
-          { title: "30 min core", value: "30 min core" },
           { title: "Balance", value: "Balance" },
           { title: "Stretch", value: "Stretch" },
           { title: "Flow", value: "Flow" },

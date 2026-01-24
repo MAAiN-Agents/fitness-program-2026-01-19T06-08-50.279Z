@@ -18,7 +18,9 @@
     "start": "npm run shell",
     "deploy": "npm run build && firebase deploy --only functions",
     "logs": "firebase functions:log",
-    "test": "jest"
+    "test": "jest",
+    "stripe:login":"stripe login",
+    "stripe:listen":"stripe listen --forward-to http://127.0.0.1:5001/nomadic-fitness/us-central1/api"
   },
   "dependencies": {
     "@sanity/client": "^7.14.0",
