@@ -771,6 +771,9 @@ const PlanPdfGrid = styled.div.attrs(dataComponent('PlanPdfGrid'))`
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: ${theme.spacing.md};
+  @media (max-width: 540px) {
+    grid-template-columns: 1fr;
+  }
 `;
 const PlanPdfCard = styled.div.attrs(dataComponent('PlanPdfCard'))`
   background: ${theme.colors.background};
@@ -781,6 +784,7 @@ const PlanPdfCard = styled.div.attrs(dataComponent('PlanPdfCard'))`
   cursor: pointer;
   display: grid;
   gap: ${theme.spacing.xs};
+  overflow: hidden;
   box-shadow: ${theme.shadow.card};
   transition: transform 0.15s ease, border-color 0.15s ease;
   &:hover,
@@ -3496,16 +3500,18 @@ function App() {
                             style={{
                               borderRadius: theme.radii.input,
                               overflow: "hidden",
-                              background: theme.colors.card,
-                              border: `1px solid ${theme.colors.border}`,
-                              height: 120,
+                              background: "transparent",
+                              border: "none",
+                              padding: 0,
+                              aspectRatio: "3 / 4",
+                              boxSizing: "border-box",
                             }}
                           >
                             {pdf.previewUrl ? (
                               <img
                                 src={pdf.previewUrl}
                                 alt={`${pdf.title} preview`}
-                                style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+                                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
                               />
                             ) : (
                               <div
