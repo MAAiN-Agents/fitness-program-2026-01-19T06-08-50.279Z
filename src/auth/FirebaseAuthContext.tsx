@@ -33,6 +33,8 @@ const firebaseApp = hasConfig
   ? (getApps().length ? getApps()[0] : initializeApp(firebaseConfig))
   : null;
 const auth = firebaseApp ? getAuth(firebaseApp) : null;
+
+console.log("the NODE_ENV + ", process.env.REACT_APP_NODE_ENV)
 if (auth && (process.env.REACT_APP_NODE_ENV === "development" || process.env.NODE_ENV === "development")) {
   connectAuthEmulator(auth, "http://localhost:9099");
 }

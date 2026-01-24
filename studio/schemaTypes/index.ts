@@ -253,6 +253,31 @@ const plan = defineType({
       type: "array",
       of: [{ type: "planDay" }],
     }),
+    defineField({
+      name: "pdfs",
+      title: "PDF Documents",
+      type: "array",
+      of: [{ type: "reference", to: [{ type: "planPdf" }] }],
+    }),
+  ],
+});
+
+const planPdf = defineType({
+  name: "planPdf",
+  title: "Plan PDF",
+  type: "document",
+  fields: [
+    defineField({ name: "title", title: "Title", type: "string" }),
+    defineField({ name: "format", title: "Format", type: "string" }),
+    defineField({ name: "description", title: "Description", type: "string" }),
+    defineField({ name: "buyButtonProductId", title: "Buy Button Product ID", type: "string" }),
+    defineField({ name: "file", title: "PDF File", type: "file" }),
+    defineField({
+      name: "previewImage",
+      title: "Preview Image",
+      type: "image",
+      options: { hotspot: true },
+    }),
   ],
 });
 
@@ -345,10 +370,17 @@ const userProfile = defineType({
   fields: [
     defineField({ name: "userId", title: "User ID", type: "string" }),
     defineField({ name: "email", title: "Email", type: "string" }),
+    defineField({ name: "firebaseUid", title: "Firebase UID", type: "string" }),
     defineField({ name: "displayName", title: "Display Name", type: "string" }),
     defineField({ name: "photoURL", title: "Photo URL", type: "url" }),
     defineField({ name: "goalCalories", title: "Goal Calories", type: "number" }),
     defineField({ name: "macroPercents", title: "Macro Percents", type: "macroPercents" }),
+    defineField({
+      name: "purchasedPdfs",
+      title: "Purchased PDFs",
+      type: "array",
+      of: [{ type: "reference", to: [{ type: "planPdf" }] }],
+    }),
     defineField({ name: "createdAt", title: "Created At", type: "datetime" }),
     defineField({ name: "updatedAt", title: "Updated At", type: "datetime" }),
   ],
@@ -368,6 +400,7 @@ export const schemaTypes = [
   planSession,
   planDay,
   plan,
+  planPdf,
   exercise,
   affiliatePromotion,
   progressEntry,

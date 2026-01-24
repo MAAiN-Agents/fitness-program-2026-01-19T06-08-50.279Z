@@ -109,6 +109,18 @@ type ExerciseSet = {
   actualDuration?: number;
   duration?: { value: number; unit: string };
 };
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      "stripe-buy-button": React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & {
+        "client-reference-id"?: string;
+        "customer-email"?: string;
+        "buy-button-id"?: string;
+        "publishable-key"?: string;
+      };
+    }
+  }
+}
 type ExerciseEntry = {
   id: string;
   userId?: string;
@@ -161,12 +173,21 @@ type PlanDay = {
   day: string;
   sessions: PlanSession[];
 };
+type PlanPdf = {
+  id: string;
+  title: string;
+  format?: string | null;
+  description?: string | null;
+  fileUrl?: string | null;
+  previewUrl?: string | null;
+};
 type Plan = {
   id: string;
   title: string;
   category: string;
   description: string;
   chart: PlanDay[];
+  pdfs?: PlanPdf[];
 };
 type Exercise = {
   id: string;
@@ -188,10 +209,12 @@ type UserProfile = {
   id: string;
   userId: string;
   email: string;
+  firebaseUid?: string;
   displayName?: string;
   photoURL?: string;
   goalCalories?: number;
   macroPercents?: MacroPercents;
+  purchasedPdfs?: PlanPdf[];
 };
 type SessionModalState = {
   session: Session | null;
@@ -703,6 +726,92 @@ const PlanExerciseMeta = styled.div.attrs(dataComponent('PlanExerciseMeta'))`
   font-size: 0.75rem;
   color: ${theme.colors.textSecondary};
 `;
+const PlanPdfModal = styled(Modal).attrs(dataComponent('PlanPdfModal'))`
+  width: min(560px, 90vw);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  gap: ${theme.spacing.md};
+`;
+const PlanPdfOverlay = styled(ModalOverlay).attrs(dataComponent('PlanPdfOverlay'))`
+  align-items: flex-start;
+  overflow-y: auto;
+  padding: ${theme.spacing.md};
+`;
+const PlanPdfGrid = styled.div.attrs(dataComponent('PlanPdfGrid'))`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: ${theme.spacing.md};
+`;
+const PlanPdfCard = styled.button.attrs(dataComponent('PlanPdfCard'))`
+  background: ${theme.colors.background};
+  border: 1px solid ${theme.colors.border};
+  border-radius: ${theme.radii.card};
+  padding: ${theme.spacing.md};
+  text-align: left;
+  cursor: pointer;
+  display: grid;
+  gap: ${theme.spacing.xs};
+  box-shadow: ${theme.shadow.card};
+  transition: transform 0.15s ease, border-color 0.15s ease;
+  &:hover,
+  &:focus {
+    transform: translateY(-2px);
+    border-color: ${theme.colors.accent2};
+    outline: 2px solid ${theme.colors.accent2};
+  }
+`;
+const PlanPdfBadge = styled.span.attrs(dataComponent('PlanPdfBadge'))`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: rgba(67, 170, 139, 0.16);
+  color: ${theme.colors.success};
+`;
+const PlanPdfBreadcrumbs = styled.div.attrs(dataComponent('PlanPdfBreadcrumbs'))`
+  display: flex;
+  align-items: center;
+  gap: ${theme.spacing.xs};
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: ${theme.colors.textSecondary};
+`;
+const PlanPdfPreview = styled.div.attrs(dataComponent('PlanPdfPreview'))`
+  border-radius: ${theme.radii.card};
+  border: 1px solid ${theme.colors.border};
+  background: ${theme.colors.background};
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: ${theme.spacing.md};
+  text-align: center;
+  color: ${theme.colors.textSecondary};
+`;
+const StripeOverlay = styled(ModalOverlay).attrs(dataComponent('StripeOverlay'))`
+  background: rgba(0, 0, 0, 0.9);
+  z-index: ${theme.z.modal + 20};
+`;
+const StripeModalCard = styled(Modal).attrs(dataComponent('StripeModalCard'))`
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  max-width: 520px;
+`;
+const StripeBuyWrapper = styled.div.attrs(dataComponent('StripeBuyWrapper'))`
+  padding: ${theme.spacing.lg};
+  border-radius: ${theme.radii.card};
+  background: ${theme.colors.card};
+  border: 1px solid ${theme.colors.border};
+  margin-bottom: ${theme.spacing.md};
+`;
 const BottomNav = styled.nav.attrs(dataComponent('BottomNav'))`
   position: fixed;
   left: 0; right: 0; bottom: 0;
@@ -1161,6 +1270,14 @@ async function fetchPlans(): Promise<Plan[]> {
       title,
       category,
       description,
+      "pdfs": pdfs[]->{
+        "id": _id,
+        title,
+        format,
+        description,
+        "fileUrl": file.asset->url,
+        "previewUrl": previewImage.asset->url
+      },
       "chart": chart[]{
         day,
         "sessions": sessions[]{
@@ -1354,6 +1471,19 @@ function useAPI(getIdToken?: () => Promise<string | null>) {
         }
         return response.json();
       }),
+    purchasePlanPdf: (payload: { sessionId: string; pdfId: string; origin?: string }) =>
+      run(async () => {
+        const authHeaders = await getAuthHeaders();
+        const response = await fetch(`${baseUrl}/purchase`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+          throw new Error(`Purchase failed with status ${response.status}`);
+        }
+        return response.json();
+      }),
   };
 }
 
@@ -1502,6 +1632,12 @@ function App() {
   const [injectPlan, setInjectPlan] = useState<Plan | null>(null);
   const [injectWeekLabel, setInjectWeekLabel] = useState("Week 1");
   const [injectMondayDate, setInjectMondayDate] = useState(() => formatDate(getUpcomingMondays(1)[0]));
+  const [pdfModalOpen, setPdfModalOpen] = useState(false);
+  const [pdfPlan, setPdfPlan] = useState<Plan | null>(null);
+  const [selectedPlanPdf, setSelectedPlanPdf] = useState<PlanPdf | null>(null);
+  const [stripeModalOpen, setStripeModalOpen] = useState(false);
+  const [pendingPurchasePdf, setPendingPurchasePdf] = useState<PlanPdf | null>(null);
+  const [processedStripeSession, setProcessedStripeSession] = useState<string | null>(null);
 
   const [plans, setPlans] = useState<Plan[]>([]);
   const [exerciseLibrary, setExerciseLibrary] = useState<Exercise[]>([]);
@@ -1588,6 +1724,10 @@ function App() {
     })),
     [progressEntries, trackerSummaryByDate, nutritionSummaryByDate]
   );
+  const purchasedPdfIds = useMemo(
+    () => new Set((userProfile?.purchasedPdfs || []).map(pdf => pdf.id)),
+    [userProfile]
+  );
 
   const refreshWeeks = async (): Promise<Week[] | null> => {
     if (!isAuthed) return null;
@@ -1641,6 +1781,15 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const existing = document.querySelector('script[src="https://js.stripe.com/v3/buy-button.js"]');
+    if (existing) return;
+    const script = document.createElement("script");
+    script.async = true;
+    script.src = "https://js.stripe.com/v3/buy-button.js";
+    document.body.appendChild(script);
+  }, []);
+
+  useEffect(() => {
     let active = true;
     Promise.all([
       cms.getPlans(),
@@ -1656,6 +1805,36 @@ function App() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get("session_id");
+    if (!sessionId || !isAuthed || processedStripeSession === sessionId) {
+      return;
+    }
+    const pendingPdfId = localStorage.getItem("pending_plan_pdf_id");
+    if (!pendingPdfId) {
+      return;
+    }
+    const origin = localStorage.getItem("stripe_referrer") || undefined;
+    api
+      .purchasePlanPdf({ sessionId, pdfId: pendingPdfId, origin })
+      .then(profile => {
+        if (profile) {
+          setUserProfile(profile as UserProfile);
+        }
+      })
+      .finally(() => {
+        setStripeModalOpen(false);
+        setPendingPurchasePdf(null);
+        setProcessedStripeSession(sessionId);
+        localStorage.removeItem("pending_plan_pdf_id");
+        params.delete("session_id");
+        const nextQuery = params.toString();
+        const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}${window.location.hash}`;
+        window.history.replaceState({}, "", nextUrl);
+      });
+  }, [api, isAuthed, processedStripeSession]);
 
   useEffect(() => {
     let active = true;
@@ -1718,6 +1897,12 @@ function App() {
       active = false;
     };
   }, [isAuthed, user]);
+
+  useEffect(() => {
+    if (isAuthed && pendingPurchasePdf && !stripeModalOpen) {
+      setStripeModalOpen(true);
+    }
+  }, [isAuthed, pendingPurchasePdf, stripeModalOpen]);
 
   useEffect(() => {
     if (!isAuthed) {
@@ -1869,6 +2054,30 @@ function App() {
     setInjectWeekLabel(nextWeekLabel);
     setInjectModalOpen(false);
     setInjectPlan(null);
+  };
+
+  const handleOpenPlanPdfModal = () => {
+    setPdfModalOpen(true);
+    setSelectedPlanPdf(null);
+  };
+
+  const handleStartPdfPurchase = (pdf: PlanPdf) => {
+    if (!pdf.id) return;
+    localStorage.setItem("pending_plan_pdf_id", pdf.id);
+    setPendingPurchasePdf(pdf);
+    if (document.referrer) {
+      localStorage.setItem("stripe_referrer", document.referrer);
+    }
+    if (!isAuthed) {
+      handleSignIn();
+      return;
+    }
+    setStripeModalOpen(true);
+  };
+
+  const handleCloseStripeModal = () => {
+    setStripeModalOpen(false);
+    setPendingPurchasePdf(null);
   };
 
   const handleSignIn = async () => {
@@ -3204,8 +3413,9 @@ function App() {
   // ---- Plans Section ----
   function renderPlans() {
     const plansForCategory = plans.filter(p => p.category === planCategory);
+    const planPdfs = pdfPlan?.pdfs ?? [];
     return (
-      <Section data-component="PlanBrowser">
+      <Section data-component="PlanBrowser" style={{ minHeight: "80vh" }}>
         <SectionTitle>Preset Workout Plans</SectionTitle>
         <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           {planCategories.map(cat => (
@@ -3227,25 +3437,42 @@ function App() {
                 <strong>{plan.title}</strong>
                 <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>{plan.description}</div>
               </div>
-              <Button
-                data-component="ViewPlanButton"
-                onClick={() => {
-                  setSelectedPlan(plan);
-                  setPlanDayFilter("All");
-                  setPlanTimeFilters({ am: true, pm: true });
-                  setPlanTypeFilters([]);
-                  setPlanYogaFilters([]);
-                  setPlanFiltersOpen(false);
-                }}
-              >
-                View
-              </Button>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <Button
+                  data-component="ViewPlanButton"
+                  onClick={() => {
+                    setSelectedPlan(plan);
+                    setPlanDayFilter("All");
+                    setPlanTimeFilters({ am: true, pm: true });
+                    setPlanTypeFilters([]);
+                    setPlanYogaFilters([]);
+                    setPlanFiltersOpen(false);
+                  }}
+                >
+                  View
+                </Button>
+                <Button
+                  data-component="DownloadPlanPdfButton"
+                  variant="secondary"
+                  onClick={() => {
+                    setPdfPlan(plan);
+                    handleOpenPlanPdfModal();
+                  }}
+                >
+                  Download PDF
+                </Button>
+              </div>
             </div>
           </Card>
         ))}
         </div>
         {selectedPlan && (
-          <ModalOverlay onClick={() => setSelectedPlan(null)}>
+          <ModalOverlay onClick={() => {
+            setSelectedPlan(null);
+            setPdfModalOpen(false);
+            setSelectedPlanPdf(null);
+            setPdfPlan(null);
+          }}>
             <PlanModal onClick={e => e.stopPropagation()}>
               <SectionTitle>{selectedPlan.title}</SectionTitle>
               <div style={{ marginBottom: 8 }}>{selectedPlan.description}</div>
@@ -3427,10 +3654,134 @@ function App() {
                 Inject Plan
               </LoadingButton>
               {!isAuthed && <AuthHint>Sign in to inject this plan into your tracker.</AuthHint>}
-              <Button data-component="DownloadPlanButton" variant="secondary" onClick={() => alert('Download as PDF/JSON')}>Download</Button>
-              <Button data-component="ClosePlanModalButton" variant="secondary" onClick={() => setSelectedPlan(null)}>Close</Button>
+              <Button
+                data-component="DownloadPlanPdfButton"
+                variant="secondary"
+                onClick={() => {
+                  setPdfPlan(selectedPlan);
+                  handleOpenPlanPdfModal();
+                }}
+              >
+                Download PDF
+              </Button>
+              <Button
+                data-component="ClosePlanModalButton"
+                variant="secondary"
+                onClick={() => {
+                  setSelectedPlan(null);
+                  setPdfModalOpen(false);
+                  setSelectedPlanPdf(null);
+                  setPdfPlan(null);
+                }}
+              >
+                Close
+              </Button>
             </PlanModal>
           </ModalOverlay>
+        )}
+        {pdfModalOpen && pdfPlan && (
+          <PlanPdfOverlay onClick={() => {
+            setPdfModalOpen(false);
+            setSelectedPlanPdf(null);
+            setPdfPlan(null);
+          }}>
+            <PlanPdfModal onClick={e => e.stopPropagation()}>
+              <SectionTitle>{pdfPlan.title} PDFs</SectionTitle>
+              {selectedPlanPdf ? (
+                <>
+                  <PlanPdfBreadcrumbs>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPlanPdf(null)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: theme.colors.textSecondary,
+                        cursor: "pointer",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
+                        fontSize: "0.75rem",
+                      }}
+                    >
+                      PDF Grid
+                    </button>
+                    <span>/</span>
+                    <span>{selectedPlanPdf.format || selectedPlanPdf.title}</span>
+                  </PlanPdfBreadcrumbs>
+                  <PlanPdfPreview>
+                    {selectedPlanPdf.previewUrl ? (
+                      <img
+                        src={selectedPlanPdf.previewUrl}
+                        alt={`${selectedPlanPdf.title} preview`}
+                        style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: theme.radii.card }}
+                      />
+                    ) : (
+                      <div>
+                        <div style={{ fontWeight: 700, marginBottom: 6 }}>{selectedPlanPdf.title}</div>
+                        <div>No preview available yet.</div>
+                      </div>
+                    )}
+                  </PlanPdfPreview>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <div style={{ fontWeight: 700 }}>{selectedPlanPdf.format || selectedPlanPdf.title}</div>
+                    {selectedPlanPdf.description && (
+                      <div style={{ color: theme.colors.textSecondary, fontSize: 14 }}>
+                        {selectedPlanPdf.description}
+                      </div>
+                    )}
+                    {purchasedPdfIds.has(selectedPlanPdf.id) ? (
+                      <Button
+                        as="a"
+                        data-component="PlanPdfDownloadButton"
+                        href={selectedPlanPdf.fileUrl || undefined}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ textDecoration: "none" }}
+                      >
+                        Download PDF
+                      </Button>
+                    ) : (
+                      <Button
+                        data-component="PlanPdfBuyButton"
+                        onClick={() => handleStartPdfPurchase(selectedPlanPdf)}
+                      >
+                        Buy PDF
+                      </Button>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  {planPdfs.length === 0 ? (
+                    <div style={{ color: theme.colors.textSecondary }}>
+                      No PDFs uploaded for this plan yet.
+                    </div>
+                  ) : (
+                    <PlanPdfGrid>
+                      {planPdfs.map(pdf => (
+                        <PlanPdfCard key={pdf.id} type="button" onClick={() => setSelectedPlanPdf(pdf)}>
+                          <div style={{ fontWeight: 700 }}>{pdf.format || pdf.title}</div>
+                          <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>{pdf.title}</div>
+                          {purchasedPdfIds.has(pdf.id) && <PlanPdfBadge>Owned</PlanPdfBadge>}
+                        </PlanPdfCard>
+                      ))}
+                    </PlanPdfGrid>
+                  )}
+                </>
+              )}
+              <Button
+                data-component="PlanPdfCloseButton"
+                variant="secondary"
+                onClick={() => {
+                  setPdfModalOpen(false);
+                  setSelectedPlanPdf(null);
+                  setPdfPlan(null);
+                }}
+              >
+                Close
+              </Button>
+            </PlanPdfModal>
+          </PlanPdfOverlay>
         )}
         {injectModalOpen && (
           <ModalOverlay onClick={() => setInjectModalOpen(false)}>
@@ -3668,6 +4019,30 @@ function App() {
         {tab === 4 && renderAffiliatePromotion()}
         {tab === 5 && renderProgress()}
       </Main>
+      {stripeModalOpen && pendingPurchasePdf && (
+        <StripeOverlay onClick={handleCloseStripeModal}>
+          <StripeModalCard onClick={e => e.stopPropagation()}>
+            <StripeBuyWrapper>
+              <div style={{ fontWeight: 700, marginBottom: 8 }}>
+                {pendingPurchasePdf.format || pendingPurchasePdf.title}
+              </div>
+              {isAuthed ? (
+                <stripe-buy-button
+                  client-reference-id={user?.uid}
+                  customer-email={user?.email || undefined}
+                  buy-button-id="buy_btn_1SryPhCc5eMYcXlTuPPZMo3I"
+                  publishable-key="pk_test_51RmhslCc5eMYcXlTGlCzBQrBP6ptz9LH3QjNhC9U53TBBwh63S2jAvZBDPMAjqk07y3xwCbaWTcB5pzdBLMcGhx100uCflJIU9"
+                />
+              ) : (
+                <div style={{ color: theme.colors.textSecondary }}>
+                  Sign in to continue your purchase.
+                </div>
+              )}
+            </StripeBuyWrapper>
+            <Button variant="secondary" onClick={handleCloseStripeModal}>Cancel</Button>
+          </StripeModalCard>
+        </StripeOverlay>
+      )}
       {calendarOpen && renderCalendarDrawer()}
       {profileOpen && renderProfileDrawer()}
       <BottomNav>

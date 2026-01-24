@@ -1,6 +1,7 @@
 import "dotenv/config";
 import * as functions from "firebase-functions";
 import express from "express";
+import Stripe from "stripe";
 import cors from "cors";
 import busboy from "busboy";
 import { createClient, type ClientConfig, type SanityClient } from "@sanity/client";
@@ -27,6 +28,9 @@ const sanityConfig: ClientConfig = {
   useCdn: false,
 };
 const sanityClient: SanityClient = createClient(sanityConfig);
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
+  apiVersion: "2025-12-15.clover",
+});
 
 const app = express();
 if (!getApps().length) {
@@ -45,7 +49,13 @@ const corsMiddleware = cors({
 });
 app.options("*", corsMiddleware);
 app.use(corsMiddleware);
-app.use(express.json());
+app.use(
+  express.json({
+    verify: (req, _res, buf) => {
+      (req as { rawBody?: Buffer }).rawBody = buf;
+    },
+  })
+);
 
 const parseProgressUpload = (req: express.Request) =>
   new Promise<{
@@ -148,6 +158,11 @@ const jsonError = (res: express.Response, status: number, message: string) =>
 const getUserId = (req: express.Request): string | null => {
   const email = (req as AuthenticatedRequest).user?.email;
   return email || null;
+};
+
+const getFirebaseUid = (req: express.Request): string | null => {
+  const uidValue = (req as AuthenticatedRequest).user?.uid;
+  return uidValue || null;
 };
 
 const requireOwner = async (
@@ -634,6 +649,7 @@ app.delete("/nutrition/meals/:mealId", requireAuth, async (req, res) => {
 
 app.get("/users/me", requireAuth, async (req, res) => {
   const userId = getUserId(req);
+  const firebaseUid = getFirebaseUid(req);
   if (!userId) {
     return jsonError(res, 400, "User email not available.");
   }
@@ -642,12 +658,19 @@ app.get("/users/me", requireAuth, async (req, res) => {
       "id": _id,
       userId,
       email,
+      firebaseUid,
       displayName,
       photoURL,
       goalCalories,
-      macroPercents
+      macroPercents,
+      "purchasedPdfs": purchasedPdfs[]->{
+        "id": _id,
+        title,
+        format,
+        "fileUrl": file.asset->url
+      }
     }`,
-    { userId }
+    { userId, firebaseUid }
   );
   if (!profile) {
     return jsonError(res, 404, "User profile not found.");
@@ -657,6 +680,7 @@ app.get("/users/me", requireAuth, async (req, res) => {
 
 app.post("/users/me", requireAuth, async (req, res) => {
   const userId = getUserId(req);
+  const firebaseUid = getFirebaseUid(req);
   if (!userId) {
     return jsonError(res, 400, "User email not available.");
   }
@@ -665,34 +689,243 @@ app.post("/users/me", requireAuth, async (req, res) => {
   const incomingPhoto = photoURL || (req as AuthenticatedRequest).user?.picture || "";
   const now = new Date().toISOString();
   const existing = await sanityClient.fetch(
-    `*[_type == "userProfile" && userId == $userId][0]{ _id, createdAt, goalCalories, macroPercents }`,
+    `*[_type == "userProfile" && userId == $userId][0]{
+      _id,
+      createdAt,
+      goalCalories,
+      macroPercents,
+      purchasedPdfs
+    }`,
     { userId }
   );
   const docId = existing?._id ?? uid("user");
   const createdAt = existing?.createdAt ?? now;
   const nextGoalCalories = goalCalories ?? existing?.goalCalories ?? null;
   const nextMacroPercents = macroPercents ?? existing?.macroPercents ?? null;
+  const nextPurchasedPdfs = existing?.purchasedPdfs ?? [];
   await sanityClient.createOrReplace({
     _id: docId,
     _type: "userProfile",
     userId,
     email: userId,
+    firebaseUid: firebaseUid || undefined,
     displayName: incomingName,
     photoURL: incomingPhoto,
     goalCalories: nextGoalCalories,
     macroPercents: nextMacroPercents,
+    purchasedPdfs: nextPurchasedPdfs,
     createdAt,
     updatedAt: now,
   });
-  return res.status(200).json({
-    id: docId,
-    userId,
-    email: userId,
-    displayName: incomingName,
-    photoURL: incomingPhoto,
-    goalCalories: nextGoalCalories,
-    macroPercents: nextMacroPercents,
-  });
+  const profile = await sanityClient.fetch(
+    `*[_type == "userProfile" && _id == $docId][0]{
+      "id": _id,
+      userId,
+      email,
+      firebaseUid,
+      displayName,
+      photoURL,
+      goalCalories,
+      macroPercents,
+      "purchasedPdfs": purchasedPdfs[]->{
+        "id": _id,
+        title,
+        format,
+        "fileUrl": file.asset->url
+      }
+    }`,
+    { docId }
+  );
+  return res.status(200).json(profile);
+});
+
+app.post("/purchase", requireAuth, async (req, res) => {
+  const userId = getUserId(req);
+  const firebaseUid = getFirebaseUid(req);
+  if (!userId) {
+    return jsonError(res, 400, "User email not available.");
+  }
+  const { sessionId, pdfId, origin } = req.body as { sessionId?: string; pdfId?: string; origin?: string };
+  if (!pdfId) {
+    return jsonError(res, 400, "pdfId is required.");
+  }
+  const pdfDoc = await sanityClient.getDocument(pdfId);
+  if (!pdfDoc) {
+    return jsonError(res, 404, "PDF not found.");
+  }
+  const profile = await sanityClient.fetch(
+    `*[_type == "userProfile" && (userId == $userId || firebaseUid == $firebaseUid)][0]{
+      _id,
+      purchasedPdfs
+    }`,
+    { userId, firebaseUid }
+  );
+  const now = new Date().toISOString();
+  const profileId = profile?._id ?? uid("user");
+  const purchasedRefs = (profile?.purchasedPdfs as Array<{ _ref: string }> | undefined) || [];
+  const alreadyPurchased = purchasedRefs.some(refItem => refItem?._ref === pdfId);
+  if (!profile) {
+    await sanityClient.create({
+      _id: profileId,
+      _type: "userProfile",
+      userId,
+      email: userId,
+      firebaseUid: firebaseUid || undefined,
+      purchasedPdfs: [ref(pdfId)],
+      createdAt: now,
+      updatedAt: now,
+      lastPurchaseSessionId: sessionId || undefined,
+      lastPurchaseOrigin: origin || undefined,
+    });
+  } else if (!alreadyPurchased) {
+    await sanityClient
+      .patch(profileId)
+      .setIfMissing({ purchasedPdfs: [] })
+      .insert("after", "purchasedPdfs[-1]", [ref(pdfId)])
+      .set({
+        updatedAt: now,
+        lastPurchaseSessionId: sessionId || undefined,
+        lastPurchaseOrigin: origin || undefined,
+      })
+      .commit();
+  } else {
+    await sanityClient
+      .patch(profileId)
+      .set({
+        updatedAt: now,
+        lastPurchaseSessionId: sessionId || undefined,
+        lastPurchaseOrigin: origin || undefined,
+      })
+      .commit();
+  }
+  const updatedProfile = await sanityClient.fetch(
+    `*[_type == "userProfile" && _id == $profileId][0]{
+      "id": _id,
+      userId,
+      email,
+      firebaseUid,
+      displayName,
+      photoURL,
+      goalCalories,
+      macroPercents,
+      "purchasedPdfs": purchasedPdfs[]->{
+        "id": _id,
+        title,
+        format,
+        "fileUrl": file.asset->url
+      }
+    }`,
+    { profileId }
+  );
+  return res.status(200).json(updatedProfile);
+});
+
+app.post("/payments/pdfCheckoutCompleted", async (req, res) => {
+  const sig = req.get("stripe-signature");
+  const rawBody = (req as { rawBody?: Buffer }).rawBody;
+  if (!sig || !rawBody) {
+    return res.status(400).send("Webhook Error");
+  }
+  if (!process.env.STRIPE_WEBHOOK_SECRET) {
+    console.error("Missing STRIPE_WEBHOOK_SECRET.");
+    return res.status(500).send("Webhook Error");
+  }
+
+  let event: Stripe.Event;
+  try {
+    event = stripe.webhooks.constructEvent(rawBody, sig, process.env.STRIPE_WEBHOOK_SECRET);
+  } catch (error) {
+    console.error("Webhook signature verification failed.", error);
+    return res.status(400).send("Webhook Error");
+  }
+
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object as Stripe.Checkout.Session;
+    const email = session.customer_details?.email || session.customer_email || undefined;
+    const firebaseUid = session.client_reference_id || undefined;
+    const metadata = session.metadata || {};
+    let productId =
+      metadata.productId ||
+      metadata.product_id ||
+      metadata.planPdfProductId ||
+      metadata.pdfProductId ||
+      metadata.buyButtonProductId;
+
+    if (!productId) {
+      const lineItems = (session as Stripe.Checkout.Session & {
+        line_items?: { data?: Array<{ price?: { product?: string | Stripe.Product } }> };
+      }).line_items;
+      const productValue = lineItems?.data?.[0]?.price?.product;
+      if (typeof productValue === "string") {
+        productId = productValue;
+      } else if (productValue && typeof productValue === "object" && "id" in productValue) {
+        productId = productValue.id;
+      }
+    }
+
+    if (!productId) {
+      console.warn("Stripe session missing productId metadata.");
+      return res.status(200).json({ received: true, status: "missing_product_id" });
+    }
+
+    const pdfDoc = await sanityClient.fetch(
+      `*[_type == "planPdf" && buyButtonProductId == $productId][0]{ _id }`,
+      { productId }
+    );
+    if (!pdfDoc?._id) {
+      console.warn("No planPdf found for productId.", productId);
+      return res.status(200).json({ received: true, status: "pdf_not_found" });
+    }
+
+    const identifier = email || firebaseUid;
+    if (!identifier) {
+      console.warn("Stripe session missing customer identifiers.");
+      return res.status(200).json({ received: true, status: "missing_customer" });
+    }
+
+    const profile = await sanityClient.fetch(
+      `*[_type == "userProfile" && (email == $email || userId == $email || firebaseUid == $firebaseUid)][0]{
+        _id,
+        purchasedPdfs
+      }`,
+      { email, firebaseUid }
+    );
+
+    const now = new Date().toISOString();
+    const profileId = profile?._id ?? uid("user");
+    const purchasedRefs = (profile?.purchasedPdfs as Array<{ _ref: string }> | undefined) || [];
+    const alreadyPurchased = purchasedRefs.some(refItem => refItem?._ref === pdfDoc._id);
+    if (!profile) {
+      await sanityClient.create({
+        _id: profileId,
+        _type: "userProfile",
+        userId: email || identifier,
+        email: email || identifier,
+        firebaseUid: firebaseUid || undefined,
+        purchasedPdfs: [ref(pdfDoc._id)],
+        createdAt: now,
+        updatedAt: now,
+        lastPurchaseSessionId: session.id,
+      });
+    } else if (!alreadyPurchased) {
+      await sanityClient
+        .patch(profileId)
+        .setIfMissing({ purchasedPdfs: [] })
+        .insert("after", "purchasedPdfs[-1]", [ref(pdfDoc._id)])
+        .set({
+          updatedAt: now,
+          lastPurchaseSessionId: session.id,
+        })
+        .commit();
+    } else {
+      await sanityClient
+        .patch(profileId)
+        .set({ updatedAt: now, lastPurchaseSessionId: session.id })
+        .commit();
+    }
+  }
+
+  return res.status(200).json({ received: true });
 });
 
 app.get("/progress/entries", requireAuth, async (req, res) => {
