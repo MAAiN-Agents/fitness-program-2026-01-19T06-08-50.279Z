@@ -287,8 +287,14 @@ const exercise = defineType({
   type: "document",
   fields: [
     defineField({ name: "title", title: "Title", type: "string" }), // name
-    defineField({ name: "isCustom", title: "Is this custom? (Did a user create this?)", type: "string" }), // name
+    defineField({ name: "isCustom", title: "Is this custom? (Did a user create this?)", type: "string" }),
     defineField({ name: "image", title: "Image", type: "url" }),
+    defineField({
+      name: "imageAsset",
+      title: "Image Asset (Overrides URL)",
+      type: "image",
+      options: { hotspot: true },
+    }),
     defineField({ name: "description", title: "Description", type: "string" }), // instructions augmented
     defineField({ name: "safety", title: "Safety", type: "string" }),
     defineField({ name: "muscle", title: "Muscle", type: "string" }),

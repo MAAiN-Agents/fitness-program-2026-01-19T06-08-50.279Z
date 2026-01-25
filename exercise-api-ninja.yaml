@@ -1,0 +1,138 @@
+openapi: 3.0.3
+info:
+  title: Exercises API (Free Tier)
+  description: |
+    Provides access to a searchable catalog of exercises targeting all major muscle groups.
+    This specification documents only endpoints and features available on the free plan.
+  version: "1.0.0"
+servers:
+  - url: https://api.api-ninjas.com
+    description: Production server
+
+security:
+  - ApiKeyAuth: []
+
+paths:
+  /v1/exercises:
+    get:
+      summary: Search exercises
+      description: |
+        Returns up to 5 exercises that match the provided search filters.
+        Results are limited by the free tier and do not support pagination.
+      operationId: searchExercises
+      parameters:
+        - name: name
+          in: query
+          description: Partial or full name of the exercise.
+          required: false
+          schema:
+            type: string
+
+        - name: type
+          in: query
+          description: Type of exercise.
+          required: false
+          schema:
+            type: string
+            enum:
+              - cardio
+              - olympic_weightlifting
+              - plyometrics
+              - powerlifting
+              - strength
+              - stretching
+              - strongman
+
+        - name: muscle
+          in: query
+          description: Primary muscle group targeted.
+          required: false
+          schema:
+            type: string
+
+        - name: difficulty
+          in: query
+          description: Difficulty level.
+          required: false
+          schema:
+            type: string
+            enum:
+              - beginner
+              - intermediate
+              - expert
+
+        - name: equipments
+          in: query
+          description: |
+            Equipment required for the exercise.
+            Multiple values may be provided as a comma-separated string.
+          required: false
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: A list of matching exercises (max 5).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Exercise"
+
+        "401":
+          description: Missing or invalid API key
+
+        "429":
+          description: Rate limit exceeded
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+
+  schemas:
+    Exercise:
+      type: object
+      required:
+        - name
+        - type
+        - muscle
+        - difficulty
+        - instructions
+        - equipments
+      properties:
+        name:
+          type: string
+          description: Name of the exercise
+
+        type:
+          type: string
+          description: Exercise type (e.g., strength, cardio)
+
+        muscle:
+          type: string
+          description: Primary muscle group targeted
+
+        difficulty:
+          type: string
+          enum:
+            - beginner
+            - intermediate
+            - expert
+
+        instructions:
+          type: string
+          description: Text instructions describing how to perform the exercise
+
+        equipments:
+          type: array
+          description: Equipment required for the exercise
+          items:
+            type: string
+
+        safety_info:
+          type: string
+          description: Optional safety guidance and performance cues

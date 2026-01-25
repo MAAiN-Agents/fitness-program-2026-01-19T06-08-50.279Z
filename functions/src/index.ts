@@ -7,6 +7,7 @@ import busboy from "busboy";
 import { createClient, type ClientConfig, type SanityClient } from "@sanity/client";
 import { initializeApp, getApps } from "firebase-admin/app";
 import { getAuth, type DecodedIdToken } from "firebase-admin/auth";
+import { createExerciseApiRouter } from "./exercise-api-ninjas/exerciseApiController";
 
 type MacroPercents = { protein: number; carbs: number; fat: number };
 type SetEntry = { weight: number; reps: number; rpe?: number; actualReps?: number; actualDuration?: number; duration?: { value: number; unit: string } };
@@ -142,6 +143,8 @@ const requireAuth: express.RequestHandler = async (req, res, next) => {
     return jsonError(res, 401, "Invalid or expired token.");
   }
 };
+
+app.use("/exercise-api", createExerciseApiRouter({ sanityClient, requireAuth }));
 
 const uid = (prefix = "doc") => `${prefix}-${crypto.randomUUID()}`;
 const ref = (id: string) => ({ _type: "reference", _ref: id });

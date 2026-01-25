@@ -8,11 +8,13 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createClient } from "@sanity/client";
 import styled, { createGlobalStyle, css } from "styled-components";
 import { useFirebaseAuth } from "./auth/FirebaseAuthContext";
+import { useExerciseAPI, type ExerciseApiExercise } from "./hooks/useExerciseAPI";
 import FitnessProgressTab, {
   type ProgressEntry,
   type TrackerSummary,
   type NutritionSummary,
 } from "./components/tabs/FitnessProgressTab";
+import ExerciseInstructionDisplay from "./components/ExerciseInstructionDisplay";
 
 const GA_ID = "G-EXCXY8B3LX";
 
@@ -192,10 +194,17 @@ type Plan = {
 type Exercise = {
   id: string;
   title: string;
-  description: string;
-  image: string;
+  description?: string | null;
+  image?: string | null;
+  imageAssetUrl?: string | null;
   type: string;
   yogaCategory: string | null;
+  muscle?: string | null;
+  difficulty?: string | null;
+  safety?: string | null;
+  equipments?: string[] | null;
+  source?: string | null;
+  isCustom?: string | null;
 };
 type AffiliatePromotion = {
   id: string;
@@ -832,7 +841,7 @@ const BottomNav = styled.nav.attrs(dataComponent('BottomNav'))`
   display: flex;
   justify-content: space-around;
   align-items: center;
-  height: 56px;
+  height: 96px;
   z-index: ${theme.z.nav};
 `;
 const BottomNavTab = styled.button.attrs((props) => ({
@@ -843,7 +852,9 @@ const BottomNavTab = styled.button.attrs((props) => ({
   background: none;
   border: none;
   color: ${props => props.active ? theme.colors.navActive : theme.colors.primary};
-  font-size: 1.2rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.1;
   padding: ${theme.spacing.sm};
   flex: 1;
   cursor: pointer;
@@ -860,8 +871,14 @@ const IconWrapper = styled.span.attrs(dataComponent('Icon'))`
   align-items: center;
   justify-content: center;
   margin-bottom: 4px;
-  width: 24px;
-  height: 24px;
+  width: 56px;
+  height: 56px;
+  img {
+    width: 56px;
+    height: 56px;
+    object-fit: contain;
+    display: block;
+  }
 `;
 const SvgIcon = styled.svg.attrs(dataComponent('SvgIcon'))`
   width: 20px;
@@ -872,6 +889,14 @@ const SvgIcon = styled.svg.attrs(dataComponent('SvgIcon'))`
   stroke-linecap: round;
   stroke-linejoin: round;
 `;
+const tabIconImages = {
+  tracker: "/tab-icon-images/tracker.png",
+  nutrition: "/tab-icon-images/nutrition.png",
+  plans: "/tab-icon-images/plans.png",
+  library: "/tab-icon-images/library.png",
+  promo: "/tab-icon-images/promo.png",
+  progress: "/tab-icon-images/progress.png",
+};
 const SetTable = styled.table.attrs(dataComponent('SetTable'))`
   width: 100%;
   margin-top: 8px;
@@ -1313,8 +1338,15 @@ async function fetchExercises(): Promise<Exercise[]> {
       title,
       description,
       image,
+      "imageAssetUrl": imageAsset.asset->url,
       type,
-      yogaCategory
+      yogaCategory,
+      muscle,
+      difficulty,
+      safety,
+      equipments,
+      source,
+      isCustom
     }`
   );
 }
@@ -1591,6 +1623,7 @@ function App() {
   const { user, loading: authLoading, signInWithGoogle, signOut, hasConfig, getIdToken } = useFirebaseAuth();
   const cms = useCMS(user?.email || "");
   const api = useAPI(getIdToken);
+  const exerciseApi = useExerciseAPI(getIdToken);
   const [authError, setAuthError] = useState<string | null>(null);
   const isAuthed = Boolean(user);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -1640,6 +1673,14 @@ function App() {
   const [libraryTypeFilters, setLibraryTypeFilters] = useState<string[]>([]);
   const [libraryYogaFilters, setLibraryYogaFilters] = useState<string[]>([]);
   const [librarySearch, setLibrarySearch] = useState("");
+  const [exerciseSearchOpen, setExerciseSearchOpen] = useState(false);
+  const [exerciseSearchName, setExerciseSearchName] = useState("");
+  const [exerciseSearchType, setExerciseSearchType] = useState("");
+  const [exerciseSearchDifficulty, setExerciseSearchDifficulty] = useState("");
+  const [exerciseSearchMuscle, setExerciseSearchMuscle] = useState("");
+  const [exerciseSearchEquipments, setExerciseSearchEquipments] = useState("");
+  const [exerciseSearchResults, setExerciseSearchResults] = useState<ExerciseApiExercise[]>([]);
+  const [exerciseSearchMessage, setExerciseSearchMessage] = useState<string | null>(null);
   const [injectModalOpen, setInjectModalOpen] = useState(false);
   const [injectPlan, setInjectPlan] = useState<Plan | null>(null);
   const [injectWeekLabel, setInjectWeekLabel] = useState("Week 1");
@@ -1776,6 +1817,14 @@ function App() {
       }
     }
     return nutritionData;
+  };
+
+  const refreshExercises = async (): Promise<Exercise[] | null> => {
+    const exerciseData = await cms.getExercises();
+    if (exerciseData) {
+      setExerciseLibrary(exerciseData);
+    }
+    return exerciseData as Exercise[] | null;
   };
 
   useEffect(() => {
@@ -2097,6 +2146,45 @@ function App() {
   const handleClosePdfDetail = () => {
     setPdfDetailOpen(false);
     setActivePdfDetail(null);
+  };
+
+  const handleExerciseSearch = async () => {
+    setExerciseSearchMessage(null);
+    if (!isAuthed) {
+      setExerciseSearchMessage("Sign in to search the exercise API.");
+      return;
+    }
+    if (!exerciseSearchName.trim() && !exerciseSearchType && !exerciseSearchDifficulty && !exerciseSearchMuscle && !exerciseSearchEquipments.trim()) {
+      setExerciseSearchMessage("Enter at least one search filter.");
+      setExerciseSearchResults([]);
+      return;
+    }
+    const results = await exerciseApi.searchExercises({
+      name: exerciseSearchName.trim() || undefined,
+      type: exerciseSearchType || undefined,
+      difficulty: exerciseSearchDifficulty || undefined,
+      muscle: exerciseSearchMuscle.trim() || undefined,
+      equipments: exerciseSearchEquipments.trim() || undefined,
+    });
+    if (!results || results.length === 0) {
+      setExerciseSearchMessage("No exercises found.");
+      setExerciseSearchResults([]);
+      return;
+    }
+    setExerciseSearchResults(results);
+  };
+
+  const handleAddExerciseFromSearch = async (exercise: ExerciseApiExercise) => {
+    setExerciseSearchMessage(null);
+    if (!isAuthed) {
+      setAuthError("Sign in to add exercises.");
+      return;
+    }
+    const added = await exerciseApi.addExercise(exercise);
+    if (added) {
+      await refreshExercises();
+      setExerciseSearchMessage("Exercise added to the library.");
+    }
   };
 
   const handleSignIn = async () => {
@@ -2933,7 +3021,7 @@ function App() {
               return (
                 <Card data-component="ExerciseEntryCard" key={entry.id}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <img src={ex.image} alt={ex.title} style={{ width: 32, height: 32, borderRadius: 8 }} />
+                    <img src={ex.image as string} alt={ex.title} style={{ width: 32, height: 32, borderRadius: 8 }} />
                     <div style={{ flex: 1 }}>
                       <strong>{ex.title}</strong>
                       <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>{ex.type}</div>
@@ -3819,7 +3907,9 @@ function App() {
 
   // ---- Exercise Library ----
   function renderExerciseLibrary() {
-    const exerciseTypes = Array.from(new Set(exerciseLibrary.map(ex => ex.type))).sort();
+    const exerciseTypes = Array.from(
+      new Set(exerciseLibrary.map(ex => ex.type).filter((value): value is string => Boolean(value)))
+    ).sort();
     const exerciseYogaCategories = Array.from(new Set(
       exerciseLibrary
         .map(ex => ex.yogaCategory)
@@ -3838,6 +3928,10 @@ function App() {
           ex.title,
           ex.description,
           ex.type,
+          ex.muscle,
+          ex.difficulty,
+          ex.safety,
+          ex.equipments ? ex.equipments.join(" ") : "",
           ex.yogaCategory || "",
         ].join(" ").toLowerCase();
         return haystack.includes(searchTerm);
@@ -3846,7 +3940,16 @@ function App() {
     });
     return (
       <Section data-component="ExerciseLibrary">
-        <SectionTitle>Exercise Library</SectionTitle>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <SectionTitle>Exercise Library</SectionTitle>
+          <Button
+            data-component="AddExerciseButton"
+            onClick={() => setExerciseSearchOpen(true)}
+            variant="secondary"
+          >
+            Add Exercise
+          </Button>
+        </div>
         <Input
           data-component="ExerciseLibrarySearch"
           type="search"
@@ -3917,13 +4020,74 @@ function App() {
             )}
           </PlanFilterMenu>
         )}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ display: "grid", gap: 12 }}>
           {filteredExercises.map(ex => (
-            <Card data-component="ExerciseCard" key={ex.id} style={{ width: 180, minHeight: 220 }}>
-              <img src={ex.image} alt={ex.title} style={{ width: 48, height: 48, borderRadius: 8, marginBottom: 8 }} />
-              <strong>{ex.title}</strong>
-              <div style={{ fontSize: 12, color: theme.colors.textSecondary, marginBottom: 4 }}>{ex.type}{ex.yogaCategory ? ` – ${ex.yogaCategory}` : ''}</div>
-              <div style={{ fontSize: 14 }}>{ex.description}</div>
+            <Card data-component="ExerciseCard" key={ex.id} style={{ display: "grid", gap: 10 }}>
+              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                {ex.imageAssetUrl || ex.image ? (
+                  <img
+                    src={ex.imageAssetUrl || ex.image || ""}
+                    alt={ex.title}
+                    style={{ width: 64, height: 64, borderRadius: 12, objectFit: "cover" }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: 64,
+                      height: 64,
+                      borderRadius: 12,
+                      background: theme.colors.background,
+                      border: `1px solid ${theme.colors.border}`,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 12,
+                      color: theme.colors.textSecondary,
+                    }}
+                  >
+                    No image
+                  </div>
+                )}
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700 }}>{ex.title}</div>
+                  <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>
+                    {[ex.type, ex.muscle, ex.difficulty].filter(Boolean).join(" • ")}
+                    {ex.yogaCategory ? ` • ${ex.yogaCategory}` : ""}
+                  </div>
+                  {ex.equipments && ex.equipments.length > 0 && (
+                    <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>
+                      Equipment: {ex.equipments.join(", ")}
+                    </div>
+                  )}
+                </div>
+              </div>
+              {ex.description && (
+                <ExerciseInstructionDisplay
+                  text={ex.description}
+                  textSecondary={theme.colors.textSecondary}
+                  accentColors={{
+                    tip: "#2E7D32",
+                    caution: "#C62828",
+                    variations: "#6D4C41",
+                    safety: "#F9A825",
+                  }}
+                />
+              )}
+              {ex.safety && (
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: theme.colors.text,
+                    background: "#FFF4CC",
+                    border: "1px solid #F2D88A",
+                    borderRadius: 10,
+                    padding: "6px 8px",
+                  }}
+                >
+                  <strong style={{ marginRight: 6 }}>Safety</strong>
+                  {ex.safety}
+                </div>
+              )}
             </Card>
           ))}
         </div>
@@ -3935,6 +4099,111 @@ function App() {
             ))}
           </ul>
         </Card>
+        {exerciseSearchOpen && (
+          <ModalOverlay onClick={() => setExerciseSearchOpen(false)}>
+            <Modal onClick={e => e.stopPropagation()}>
+              <SectionTitle>Add Exercise from API</SectionTitle>
+              <Label htmlFor="exercise-search-name">Exercise name</Label>
+              <Input
+                id="exercise-search-name"
+                value={exerciseSearchName}
+                onChange={e => setExerciseSearchName(e.target.value)}
+                placeholder="e.g. push up"
+              />
+              <Label htmlFor="exercise-search-type">Type</Label>
+              <select
+                id="exercise-search-type"
+                value={exerciseSearchType}
+                onChange={e => setExerciseSearchType(e.target.value)}
+                style={{ height: 40, borderRadius: 8, border: `1px solid ${theme.colors.border}`, padding: "0 8px", marginBottom: 12 }}
+              >
+                <option value="">Any</option>
+                {["cardio", "olympic_weightlifting", "plyometrics", "powerlifting", "strength", "stretching", "strongman"].map(type => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+              <Label htmlFor="exercise-search-difficulty">Difficulty</Label>
+              <select
+                id="exercise-search-difficulty"
+                value={exerciseSearchDifficulty}
+                onChange={e => setExerciseSearchDifficulty(e.target.value)}
+                style={{ height: 40, borderRadius: 8, border: `1px solid ${theme.colors.border}`, padding: "0 8px", marginBottom: 12 }}
+              >
+                <option value="">Any</option>
+                {["beginner", "intermediate", "expert"].map(level => (
+                  <option key={level} value={level}>{level}</option>
+                ))}
+              </select>
+              <Label htmlFor="exercise-search-muscle">Muscle</Label>
+              <Input
+                id="exercise-search-muscle"
+                value={exerciseSearchMuscle}
+                onChange={e => setExerciseSearchMuscle(e.target.value)}
+                placeholder="e.g. chest"
+              />
+              <Label htmlFor="exercise-search-equipment">Equipments (comma separated)</Label>
+              <Input
+                id="exercise-search-equipment"
+                value={exerciseSearchEquipments}
+                onChange={e => setExerciseSearchEquipments(e.target.value)}
+                placeholder="e.g. dumbbell, barbell"
+              />
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                <Button variant="secondary" onClick={() => setExerciseSearchOpen(false)}>Close</Button>
+                <LoadingButton onClick={handleExerciseSearch} disabled={exerciseApi.loading}>
+                  {exerciseApi.loading && <SpinnerDot />}
+                  Search
+                </LoadingButton>
+              </div>
+              {exerciseSearchMessage && (
+                <div style={{ marginTop: 12, fontSize: 12, color: theme.colors.textSecondary }}>
+                  {exerciseSearchMessage}
+                </div>
+              )}
+              {exerciseSearchResults.length > 0 && (
+                <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
+                  {exerciseSearchResults.map(exercise => (
+                    <Card key={`${exercise.name}-${exercise.muscle}`} data-component="ExerciseSearchResult">
+                      <div style={{ fontWeight: 700 }}>{exercise.name}</div>
+                      <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>
+                        {[exercise.type, exercise.muscle, exercise.difficulty].filter(Boolean).join(" • ")}
+                      </div>
+                      <ExerciseInstructionDisplay
+                        text={exercise.instructions}
+                        textSecondary={theme.colors.textSecondary}
+                        accentColors={{
+                          tip: "#2E7D32",
+                          caution: "#C62828",
+                          variations: "#6D4C41",
+                          safety: "#F9A825",
+                        }}
+                      />
+                      {exercise.equipments && exercise.equipments.length > 0 && (
+                        <div style={{ fontSize: 12, color: theme.colors.textSecondary, marginTop: 6 }}>
+                          Equipment: {exercise.equipments.join(", ")}
+                        </div>
+                      )}
+                      {exercise.safety_info && (
+                        <div style={{ fontSize: 12, color: theme.colors.textSecondary, marginTop: 6 }}>
+                          Safety: {exercise.safety_info}
+                        </div>
+                      )}
+                      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                        <LoadingButton
+                          onClick={() => handleAddExerciseFromSearch(exercise)}
+                          disabled={exerciseApi.loading}
+                        >
+                          {exerciseApi.loading && <SpinnerDot />}
+                          Add to library
+                        </LoadingButton>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </Modal>
+          </ModalOverlay>
+        )}
       </Section>
     );
   }
@@ -3979,7 +4248,7 @@ function App() {
     <>
       <GlobalStyle />
       <AppBar>
-        <AppLogo>🏕️ Nomadic Gym Life</AppLogo>
+        <AppLogo>🏕️ Nomad@Gym</AppLogo>
         <AppNav>
           <NavTab active={tab === 0} onClick={() => setTab(0)} aria-label="Fitness Tracker">Tracker</NavTab>
           <NavTab active={tab === 1} onClick={() => setTab(1)} aria-label="Nutrition">Nutrition</NavTab>
@@ -4154,27 +4423,39 @@ function App() {
       {profileOpen && renderProfileDrawer()}
       <BottomNav>
         <BottomNavTab active={tab === 0} onClick={() => setTab(0)} aria-label="Fitness Tracker">
-          <IconWrapper><TrackerIcon /></IconWrapper>
+          <IconWrapper>
+            <img src={tabIconImages.tracker} alt="" aria-hidden="true" />
+          </IconWrapper>
           Tracker
         </BottomNavTab>
         <BottomNavTab active={tab === 1} onClick={() => setTab(1)} aria-label="Nutrition">
-          <IconWrapper><NutritionIcon /></IconWrapper>
+          <IconWrapper>
+            <img src={tabIconImages.nutrition} alt="" aria-hidden="true" />
+          </IconWrapper>
           Nutrition
         </BottomNavTab>
         <BottomNavTab active={tab === 2} onClick={() => setTab(2)} aria-label="Plans">
-          <IconWrapper><PlansIcon /></IconWrapper>
+          <IconWrapper>
+            <img src={tabIconImages.plans} alt="" aria-hidden="true" />
+          </IconWrapper>
           Plans
         </BottomNavTab>
         <BottomNavTab active={tab === 3} onClick={() => setTab(3)} aria-label="Library">
-          <IconWrapper><LibraryIcon /></IconWrapper>
+          <IconWrapper>
+            <img src={tabIconImages.library} alt="" aria-hidden="true" />
+          </IconWrapper>
           Library
         </BottomNavTab>
         <BottomNavTab active={tab === 4} onClick={() => setTab(4)} aria-label="Promo">
-          <IconWrapper><PromoIcon /></IconWrapper>
+          <IconWrapper>
+            <img src={tabIconImages.promo} alt="" aria-hidden="true" />
+          </IconWrapper>
           Promo
         </BottomNavTab>
         <BottomNavTab active={tab === 5} onClick={() => setTab(5)} aria-label="Progress">
-          <IconWrapper><ProgressIcon /></IconWrapper>
+          <IconWrapper>
+            <img src={tabIconImages.progress} alt="" aria-hidden="true" />
+          </IconWrapper>
           Progress
         </BottomNavTab>
       </BottomNav>
