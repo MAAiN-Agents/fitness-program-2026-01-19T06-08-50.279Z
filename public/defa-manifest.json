@@ -10,19 +10,19 @@
     {
       "name": "docs/ReferenceMaterial.md",
       "label": "Reference Material: Nomadic Gym Life App Requirements",
-      "value": "Mobile-first fitness tracker and preset plan app. All theme tokens, GlobalStyle, and styled components are inline. All data is loaded from the inline CMS database (db.json). Includes fitness tracker, nutrition tracker, preset workout plans, exercise library, and affiliate promotion.",
+      "value": "Mobile-first fitness tracker and preset plan app. All theme tokens, GlobalStyle, and styled components are inline. All data is loaded from the inline CMS database (db.json). Includes fitness tracker, nutrition tracker, preset workout plans, exercise library, and promotion.",
       "type": "markdown"
     },
     {
       "name": "db.json",
       "label": "Inline CMS Database",
-      "value": "{weeks, nutritionDays, plans, exerciseLibrary, affiliatePromotions}",
+      "value": "{weeks, nutritionDays, plans, exerciseLibrary}",
       "type": "string"
     }
   ],
   "favicon": "https://cdn-icons-png.flaticon.com/512/1048/1048953.png",
   "description": "Nomadic Gym Life is a mobile-first React fitness tracker app with inline CMS, preset workout plans, nutrition tracking, and an exercise library, styled with inline theme tokens and styled-components.",
-  "csvKeywords": "fitness tracker, mobile-first, React app, styled-components, inline CMS, workout plans, nutrition tracking, exercise library, van life, gym, yoga, affiliate promotion",
+  "csvKeywords": "fitness tracker, mobile-first, React app, styled-components, inline CMS, workout plans, nutrition tracking, exercise library, van life, gym, yoga, promotion",
   "author": "MAAiN",
   "ogTitle": "Nomadic Gym Life – Mobile Fitness & Plans App",
   "ogDescription": "Track your workouts, manage nutrition, browse preset plans, and explore exercises on the go. Built for van life, gym goers, and digital nomads.",

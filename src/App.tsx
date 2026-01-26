@@ -180,6 +180,7 @@ type PlanPdf = {
   title: string;
   format?: string | null;
   description?: string | null;
+  buyButtonId?: string | null;
   fileUrl?: string | null;
   previewUrl?: string | null;
 };
@@ -205,6 +206,15 @@ type Exercise = {
   equipments?: string[] | null;
   source?: string | null;
   isCustom?: string | null;
+  videos?: ExerciseVideo[];
+};
+type ExerciseVideo = {
+  youtubeId: string;
+  title?: string | null;
+  channel?: string | null;
+  durationSeconds?: number | null;
+  isPrimary?: boolean | null;
+  notes?: string | null;
 };
 type AffiliatePromotion = {
   id: string;
@@ -1312,6 +1322,7 @@ async function fetchPlans(): Promise<Plan[]> {
         title,
         format,
         description,
+        buyButtonId,
         "fileUrl": file.asset->url,
         "previewUrl": previewImage.asset->url
       },
@@ -1346,7 +1357,15 @@ async function fetchExercises(): Promise<Exercise[]> {
       safety,
       equipments,
       source,
-      isCustom
+      isCustom,
+      "videos": videos[]{
+        youtubeId,
+        title,
+        channel,
+        durationSeconds,
+        isPrimary,
+        notes
+      }
     }`
   );
 }
@@ -1681,6 +1700,9 @@ function App() {
   const [exerciseSearchEquipments, setExerciseSearchEquipments] = useState("");
   const [exerciseSearchResults, setExerciseSearchResults] = useState<ExerciseApiExercise[]>([]);
   const [exerciseSearchMessage, setExerciseSearchMessage] = useState<string | null>(null);
+  const [videoModalOpen, setVideoModalOpen] = useState(false);
+  const [activeVideo, setActiveVideo] = useState<ExerciseVideo | null>(null);
+  const [activeVideoList, setActiveVideoList] = useState<ExerciseVideo[]>([]);
   const [injectModalOpen, setInjectModalOpen] = useState(false);
   const [injectPlan, setInjectPlan] = useState<Plan | null>(null);
   const [injectWeekLabel, setInjectWeekLabel] = useState("Week 1");
@@ -2185,6 +2207,20 @@ function App() {
       await refreshExercises();
       setExerciseSearchMessage("Exercise added to the library.");
     }
+  };
+
+  const handleOpenVideoModal = (videos: ExerciseVideo[], selected?: ExerciseVideo | null) => {
+    if (!videos || videos.length === 0) return;
+    const primary = videos.find(video => video.isPrimary) || videos[0];
+    setActiveVideoList(videos);
+    setActiveVideo(selected || primary);
+    setVideoModalOpen(true);
+  };
+
+  const handleCloseVideoModal = () => {
+    setVideoModalOpen(false);
+    setActiveVideo(null);
+    setActiveVideoList([]);
   };
 
   const handleSignIn = async () => {
@@ -4061,6 +4097,58 @@ function App() {
                   )}
                 </div>
               </div>
+              {ex.videos && ex.videos.length > 0 && (() => {
+                const primary = ex.videos.find(video => video.isPrimary) || ex.videos[0];
+                const extraCount = Math.max(ex.videos.length - 1, 0);
+                return (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {primary && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenVideoModal(ex.videos || [], primary)}
+                        style={{
+                          border: "none",
+                          padding: 0,
+                          background: "transparent",
+                          cursor: "pointer",
+                        }}
+                        aria-label={`Open video ${primary.title || "demo"}`}
+                      >
+                        <img
+                          src={`https://img.youtube.com/vi/${primary.youtubeId}/hqdefault.jpg`}
+                          alt={primary.title || ex.title}
+                          style={{
+                            width: 88,
+                            height: 56,
+                            borderRadius: 10,
+                            objectFit: "cover",
+                            border: `1px solid ${theme.colors.border}`,
+                          }}
+                        />
+                      </button>
+                    )}
+                    {extraCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenVideoModal(ex.videos || [], primary)}
+                        style={{
+                          width: 56,
+                          height: 56,
+                          borderRadius: 10,
+                          border: `1px dashed ${theme.colors.border}`,
+                          background: theme.colors.background,
+                          color: theme.colors.textSecondary,
+                          fontWeight: 700,
+                          cursor: "pointer",
+                        }}
+                        aria-label={`Open ${extraCount} more videos`}
+                      >
+                        +{extraCount}
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
               {ex.description && (
                 <ExerciseInstructionDisplay
                   text={ex.description}
@@ -4288,8 +4376,8 @@ function App() {
                 <stripe-buy-button
                   client-reference-id={user?.uid}
                   customer-email={user?.email || undefined}
-                  buy-button-id="buy_btn_1SryPhCc5eMYcXlTuPPZMo3I"
-                  publishable-key="pk_test_51RmhslCc5eMYcXlTGlCzBQrBP6ptz9LH3QjNhC9U53TBBwh63S2jAvZBDPMAjqk07y3xwCbaWTcB5pzdBLMcGhx100uCflJIU9"
+                  buy-button-id={pendingPurchasePdf.buyButtonId || "buy_btn_1SryPhCc5eMYcXlTuPPZMo3I"}
+                  publishable-key="pk_live_51RmhseCWmk2lOeGt6p8O13EcNfGXCYgHwPsOPf5f6IL6uzWwKEnhUczMBtmufmB6pzr3d7iNuYdfbRmV9YdheWkL00y7d8jQNJ"
                 />
               ) : (
                 <div style={{ color: theme.colors.textSecondary }}>
@@ -4367,6 +4455,79 @@ function App() {
                 </Button>
               )}
               <Button variant="secondary" onClick={handleClosePdfDetail}>
+                Close
+              </Button>
+            </div>
+          </Modal>
+        </ModalOverlay>
+      )}
+      {videoModalOpen && activeVideo && (
+        <ModalOverlay onClick={handleCloseVideoModal}>
+          <Modal onClick={e => e.stopPropagation()}>
+            <SectionTitle>{activeVideo.title || "Exercise Video"}</SectionTitle>
+            <div
+              style={{
+                position: "relative",
+                paddingTop: "56.25%",
+                background: theme.colors.background,
+                borderRadius: theme.radii.card,
+                overflow: "hidden",
+                border: `1px solid ${theme.colors.border}`,
+              }}
+            >
+              <iframe
+                title={activeVideo.title || "Exercise Video"}
+                src={`https://www.youtube.com/embed/${activeVideo.youtubeId}`}
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                  border: 0,
+                }}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
+            {activeVideo.channel && (
+              <div style={{ fontSize: 12, color: theme.colors.textSecondary, marginTop: 8 }}>
+                {activeVideo.channel}
+              </div>
+            )}
+            {activeVideo.notes && (
+              <div style={{ fontSize: 12, color: theme.colors.textSecondary, marginTop: 4 }}>
+                {activeVideo.notes}
+              </div>
+            )}
+            {activeVideoList.length > 1 && (
+              <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                {activeVideoList.map(video => (
+                  <button
+                    key={video.youtubeId}
+                    type="button"
+                    onClick={() => setActiveVideo(video)}
+                    style={{
+                      border: video.youtubeId === activeVideo.youtubeId
+                        ? `2px solid ${theme.colors.accent2}`
+                        : `1px solid ${theme.colors.border}`,
+                      borderRadius: 8,
+                      padding: 0,
+                      background: "transparent",
+                      cursor: "pointer",
+                    }}
+                    aria-label={`Play ${video.title || "video"}`}
+                  >
+                    <img
+                      src={`https://img.youtube.com/vi/${video.youtubeId}/hqdefault.jpg`}
+                      alt={video.title || "Video thumbnail"}
+                      style={{ width: 96, height: 60, borderRadius: 6, objectFit: "cover", display: "block" }}
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+              <Button variant="secondary" onClick={handleCloseVideoModal}>
                 Close
               </Button>
             </div>

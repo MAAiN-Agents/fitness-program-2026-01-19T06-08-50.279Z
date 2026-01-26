@@ -1,4 +1,5 @@
 import { defineField, defineType } from "sanity";
+import YouTubeSearchInput from "../components/YouTubeSearchInput";
 
 const duration = defineType({
   name: "duration",
@@ -270,6 +271,7 @@ const planPdf = defineType({
     defineField({ name: "title", title: "Title", type: "string" }),
     defineField({ name: "format", title: "Format", type: "string" }),
     defineField({ name: "description", title: "Description", type: "string" }),
+    defineField({ name: "buyButtonId", title: "Stripe Buy Button ID", type: "string" }),
     defineField({ name: "buyButtonProductId", title: "Buy Button Product ID", type: "string" }),
     defineField({ name: "file", title: "PDF File", type: "file" }),
     defineField({
@@ -279,6 +281,31 @@ const planPdf = defineType({
       options: { hotspot: true },
     }),
   ],
+});
+
+const exerciseVideo = defineType({
+  name: "exerciseVideo",
+  title: "Exercise Video",
+  type: "object",
+  fields: [
+    defineField({
+      name: "youtubeId",
+      title: "YouTube Video ID",
+      type: "string",
+      validation: Rule => Rule.required(),
+    }),
+    defineField({ name: "title", title: "Title", type: "string" }),
+    defineField({ name: "channel", title: "Channel", type: "string" }),
+    defineField({ name: "durationSeconds", title: "Duration (seconds)", type: "number" }),
+    defineField({ name: "isPrimary", title: "Primary Demo", type: "boolean", initialValue: false }),
+    defineField({ name: "notes", title: "Notes", type: "string" }),
+  ],
+  preview: {
+    select: {
+      title: "title",
+      subtitle: "channel",
+    },
+  },
 });
 
 const exercise = defineType({
@@ -295,6 +322,19 @@ const exercise = defineType({
       type: "image",
       options: { hotspot: true },
     }),
+    defineField({
+      name: "videos",
+      title: "Exercise Videos",
+      type: "array",
+      of: [
+        {
+          type: "exerciseVideo",
+          components: {
+            input: YouTubeSearchInput,
+          },
+        },
+      ],
+    }),
     defineField({ name: "description", title: "Description", type: "string" }), // instructions augmented
     defineField({ name: "safety", title: "Safety", type: "string" }),
     defineField({ name: "muscle", title: "Muscle", type: "string" }),
@@ -305,8 +345,8 @@ const exercise = defineType({
       of: [{ type: "string" }],
     }),
     defineField({
-      name: "type",
-      title: "difficulty",
+      name: "difficulty",
+      title: "Difficulty",
       type: "string",
       options: {
         list: [
@@ -442,6 +482,7 @@ export const schemaTypes = [
   planDay,
   plan,
   planPdf,
+  exerciseVideo,
   exercise,
   affiliatePromotion,
   progressEntry,

@@ -40,9 +40,11 @@ if (!getApps().length) {
 const corsMiddleware = cors({
   origin: [
     "https://nomadic-fitness.web.app",
+    "https://nomad-fitness.sanity.studio",
     "https://nomadic-fitness.firebaseapp.com",
     "http://localhost:3000",
     "http://localhost:3002",
+    "http://localhost:3333",
   ],
   credentials: true,
   methods: ["POST", "GET", "PUT", "DELETE", "OPTIONS", "HEAD"],
@@ -930,6 +932,83 @@ app.post("/payments/pdfCheckoutCompleted", async (req, res) => {
   }
 
   return res.status(200).json({ received: true });
+});
+
+const isoToSeconds = (iso: string): number => {
+  const match = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!match) return 0;
+  const [, h, m, s] = match;
+  return (Number(h) || 0) * 3600 + (Number(m) || 0) * 60 + (Number(s) || 0);
+};
+
+app.get("/youtubeSearch", async (req, res) => {
+  try {
+    const query = String(req.query.q || "").trim();
+    if (!query) {
+      return jsonError(res, 400, 'Missing query param "q".');
+    }
+    const apiKey = process.env.YOUTUBE_API_KEY || "";
+    if (!apiKey) {
+      return jsonError(res, 500, "YouTube API key is not configured.");
+    }
+    const searchUrl = new URL("https://www.googleapis.com/youtube/v3/search");
+    searchUrl.search = new URLSearchParams({
+      part: "snippet",
+      q: query,
+      type: "video",
+      maxResults: "5",
+      key: apiKey,
+    }).toString();
+    const searchResponse = await fetch(searchUrl.toString());
+    const searchData = (await searchResponse.json()) as {
+      items?: Array<{
+        id?: { videoId?: string };
+        snippet?: {
+          title?: string;
+          channelTitle?: string;
+          thumbnails?: { medium?: { url?: string }; default?: { url?: string } };
+        };
+      }>;
+    };
+    if (!searchResponse.ok) {
+      return jsonError(res, searchResponse.status, "YouTube search failed.");
+    }
+    const items = Array.isArray(searchData.items) ? searchData.items : [];
+    const videoIds = items.map((item: { id?: { videoId?: string } }) => item.id?.videoId).filter(Boolean);
+    if (videoIds.length === 0) {
+      return res.status(200).json([]);
+    }
+    const detailsUrl = new URL("https://www.googleapis.com/youtube/v3/videos");
+    detailsUrl.search = new URLSearchParams({
+      part: "contentDetails",
+      id: videoIds.join(","),
+      key: apiKey,
+    }).toString();
+    const detailsResponse = await fetch(detailsUrl.toString());
+    const detailsData = (await detailsResponse.json()) as {
+      items?: Array<{ id: string; contentDetails?: { duration?: string } }>;
+    };
+    if (!detailsResponse.ok) {
+      return jsonError(res, detailsResponse.status, "YouTube details failed.");
+    }
+    const durationMap: Record<string, number> = {};
+    const detailItems = Array.isArray(detailsData.items) ? detailsData.items : [];
+    detailItems.forEach((item: { id: string; contentDetails?: { duration?: string } }) => {
+      const iso = item.contentDetails?.duration || "";
+      durationMap[item.id] = isoToSeconds(iso);
+    });
+    const results = items.map((item: any) => ({
+      youtubeId: item.id?.videoId,
+      title: item.snippet?.title,
+      channel: item.snippet?.channelTitle,
+      durationSeconds: durationMap[item.id?.videoId] ?? null,
+      thumbnail: item.snippet?.thumbnails?.medium?.url || item.snippet?.thumbnails?.default?.url,
+    }));
+    return res.status(200).json(results);
+  } catch (error) {
+    console.error("YouTube search failed", error);
+    return jsonError(res, 500, "YouTube search failed.");
+  }
 });
 
 app.get("/progress/entries", requireAuth, async (req, res) => {
