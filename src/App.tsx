@@ -1703,6 +1703,7 @@ function App() {
   const [videoModalOpen, setVideoModalOpen] = useState(false);
   const [activeVideo, setActiveVideo] = useState<ExerciseVideo | null>(null);
   const [activeVideoList, setActiveVideoList] = useState<ExerciseVideo[]>([]);
+  const [processedPdfParam, setProcessedPdfParam] = useState(false);
   const [injectModalOpen, setInjectModalOpen] = useState(false);
   const [injectPlan, setInjectPlan] = useState<Plan | null>(null);
   const [injectWeekLabel, setInjectWeekLabel] = useState("Week 1");
@@ -1889,6 +1890,24 @@ function App() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (processedPdfParam || plans.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const pdfId = params.get("pdfDownload") || params.get("pdfDowload");
+    if (!pdfId) return;
+    const pdfMatch = plans.flatMap(plan => plan.pdfs || []).find(pdf => pdf.id === pdfId);
+    if (!pdfMatch) return;
+    setTab(2);
+    setActivePdfDetail(pdfMatch);
+    setPdfDetailOpen(true);
+    params.delete("pdfDownload");
+    params.delete("pdfDowload");
+    const nextQuery = params.toString();
+    const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}${window.location.hash}`;
+    window.history.replaceState({}, "", nextUrl);
+    setProcessedPdfParam(true);
+  }, [processedPdfParam, plans]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
