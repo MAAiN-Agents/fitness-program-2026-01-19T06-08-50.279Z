@@ -934,6 +934,319 @@ app.post("/payments/pdfCheckoutCompleted", async (req, res) => {
   return res.status(200).json({ received: true });
 });
 
+const getGooglePlacesApiKey = () => process.env.GOOGLE_PLACES_API_KEY || "";
+
+const extractCityFromComponents = (
+  components?: Array<{ long_name?: string; longText?: string; types?: string[] }>
+) => {
+  if (!Array.isArray(components)) return null;
+  const findByType = (type: string) =>
+    components.find(component => component.types?.includes(type))?.long_name ||
+    components.find(component => component.types?.includes(type))?.longText ||
+    null;
+  return (
+    findByType("locality") ||
+    findByType("postal_town") ||
+    findByType("administrative_area_level_2") ||
+    findByType("administrative_area_level_1") ||
+    null
+  );
+};
+
+const extractPlaceId = (value?: string | null) => {
+  if (!value) return null;
+  if (value.startsWith("places/")) {
+    return value.split("/")[1] || null;
+  }
+  return value;
+};
+
+const getPlacesHeaders = (apiKey: string, fieldMask: string) => ({
+  "Content-Type": "application/json",
+  "X-Goog-Api-Key": apiKey,
+  "X-Goog-FieldMask": fieldMask,
+});
+
+app.get("/placesAutocomplete", async (req, res) => {
+  try {
+    const query = String(req.query.q || "").trim();
+    if (!query) {
+      return jsonError(res, 400, 'Missing query param "q".');
+    }
+    const apiKey = getGooglePlacesApiKey();
+    if (!apiKey) {
+      return jsonError(res, 500, "Google Places API key is not configured.");
+    }
+    const placeType = String(req.query.type || "").trim();
+    const fieldMask =
+      "suggestions.placePrediction.placeId,suggestions.placePrediction.text," +
+      "suggestions.placePrediction.structuredFormat,suggestions.placePrediction.types";
+    const body: Record<string, unknown> = {
+      input: query,
+    };
+    if (placeType) {
+      body.includedPrimaryTypes = [placeType];
+    }
+    const autoResponse = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
+      method: "POST",
+      headers: getPlacesHeaders(apiKey, fieldMask),
+      body: JSON.stringify(body),
+    });
+    const autoData = (await autoResponse.json()) as {
+      suggestions?: Array<{
+        placePrediction?: {
+          placeId?: string;
+          text?: { text?: string };
+          structuredFormat?: {
+            mainText?: { text?: string };
+            secondaryText?: { text?: string };
+          };
+          types?: string[];
+        };
+      }>;
+      error?: { message?: string };
+    };
+    if (!autoResponse.ok) {
+      return jsonError(res, autoResponse.status, autoData.error?.message || "Places autocomplete failed.");
+    }
+    const suggestions = Array.isArray(autoData.suggestions) ? autoData.suggestions : [];
+    const payload = suggestions
+      .map(suggestion => suggestion.placePrediction)
+      .filter(Boolean)
+      .map(prediction => ({
+        placeId: extractPlaceId(prediction?.placeId) || null,
+        name: prediction?.structuredFormat?.mainText?.text || prediction?.text?.text || null,
+        secondaryText: prediction?.structuredFormat?.secondaryText?.text || null,
+        types: prediction?.types ?? null,
+      }));
+    return res.status(200).json(payload);
+  } catch (error) {
+    console.error("Places autocomplete failed", error);
+    return jsonError(res, 500, "Places autocomplete failed.");
+  }
+});
+
+app.get("/placesSearch", async (req, res) => {
+  try {
+    const query = String(req.query.q || "").trim();
+    if (!query) {
+      return jsonError(res, 400, 'Missing query param "q".');
+    }
+    const apiKey = getGooglePlacesApiKey();
+    if (!apiKey) {
+      return jsonError(res, 500, "Google Places API key is not configured.");
+    }
+    const placeType = String(req.query.type || "").trim();
+    const fieldMask =
+      "places.id,places.displayName,places.formattedAddress,places.shortFormattedAddress,places.location," +
+      "places.rating,places.types,places.primaryType,places.primaryTypeDisplayName,places.googleMapsUri";
+    const searchResponse = await fetch("https://places.googleapis.com/v1/places:searchText", {
+      method: "POST",
+      headers: getPlacesHeaders(apiKey, fieldMask),
+      body: JSON.stringify({
+        textQuery: query,
+        includedType: placeType || undefined,
+      }),
+    });
+    const searchData = (await searchResponse.json()) as {
+      places?: Array<{
+        id?: string;
+        name?: string;
+        displayName?: { text?: string };
+        formattedAddress?: string;
+        shortFormattedAddress?: string;
+        rating?: number;
+        types?: string[];
+        primaryType?: string;
+        primaryTypeDisplayName?: { text?: string };
+        googleMapsUri?: string;
+        location?: { latitude?: number; longitude?: number };
+      }>;
+      error?: { message?: string };
+    };
+    if (!searchResponse.ok) {
+      return jsonError(
+        res,
+        searchResponse.status,
+        searchData.error?.message || "Google Places search failed."
+      );
+    }
+    const results = Array.isArray(searchData.places) ? searchData.places : [];
+    const payload = results.map(item => ({
+      placeId: extractPlaceId(item.id) || extractPlaceId(item.name),
+      name: item.displayName?.text || null,
+      address: item.formattedAddress || item.shortFormattedAddress || null,
+      rating: item.rating ?? null,
+      types: item.types ?? null,
+      location: item.location
+        ? { lat: item.location.latitude ?? null, lng: item.location.longitude ?? null }
+        : null,
+    }));
+    return res.status(200).json(payload);
+  } catch (error) {
+    console.error("Google Places search failed", error);
+    return jsonError(res, 500, "Google Places search failed.");
+  }
+});
+
+app.get("/placesNearby", async (req, res) => {
+  try {
+    const lat = Number(req.query.lat);
+    const lng = Number(req.query.lng);
+    const radius = Number(req.query.radius || 3000);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return jsonError(res, 400, "Missing or invalid lat/lng params.");
+    }
+    const apiKey = getGooglePlacesApiKey();
+    if (!apiKey) {
+      return jsonError(res, 500, "Google Places API key is not configured.");
+    }
+    const placeType = String(req.query.type || "").trim();
+    const fieldMask =
+      "places.id,places.displayName,places.formattedAddress,places.shortFormattedAddress,places.location," +
+      "places.rating,places.types,places.primaryType,places.primaryTypeDisplayName,places.googleMapsUri";
+    const body: Record<string, unknown> = {
+      locationRestriction: {
+        circle: {
+          center: { latitude: lat, longitude: lng },
+          radius: Number.isFinite(radius) ? radius : 3000,
+        },
+      },
+    };
+    if (placeType) {
+      body.includedTypes = [placeType];
+    }
+    const nearbyResponse = await fetch("https://places.googleapis.com/v1/places:searchNearby", {
+      method: "POST",
+      headers: getPlacesHeaders(apiKey, fieldMask),
+      body: JSON.stringify(body),
+    });
+    const nearbyData = (await nearbyResponse.json()) as {
+      places?: Array<{
+        id?: string;
+        name?: string;
+        displayName?: { text?: string };
+        formattedAddress?: string;
+        shortFormattedAddress?: string;
+        rating?: number;
+        types?: string[];
+        primaryType?: string;
+        primaryTypeDisplayName?: { text?: string };
+        googleMapsUri?: string;
+        location?: { latitude?: number; longitude?: number };
+      }>;
+      error?: { message?: string };
+    };
+    if (!nearbyResponse.ok) {
+      return jsonError(res, nearbyResponse.status, nearbyData.error?.message || "Places nearby failed.");
+    }
+    const results = Array.isArray(nearbyData.places) ? nearbyData.places : [];
+    const payload = results.map(item => ({
+      placeId: extractPlaceId(item.id) || extractPlaceId(item.name),
+      name: item.displayName?.text || null,
+      address: item.formattedAddress || item.shortFormattedAddress || null,
+      rating: item.rating ?? null,
+      types: item.types ?? null,
+      mapsUrl: item.googleMapsUri ?? null,
+      location: item.location
+        ? { lat: item.location.latitude ?? null, lng: item.location.longitude ?? null }
+        : null,
+    }));
+    return res.status(200).json(payload);
+  } catch (error) {
+    console.error("Places nearby failed", error);
+    return jsonError(res, 500, "Places nearby failed.");
+  }
+});
+
+app.get("/placeDetails", async (req, res) => {
+  try {
+    const placeId = String(req.query.placeId || "").trim();
+    if (!placeId) {
+      return jsonError(res, 400, 'Missing query param "placeId".');
+    }
+    const apiKey = getGooglePlacesApiKey();
+    if (!apiKey) {
+      return jsonError(res, 500, "Google Places API key is not configured.");
+    }
+    const cleanPlaceId = extractPlaceId(placeId);
+    const fieldMask =
+      "id,displayName,formattedAddress,shortFormattedAddress,location,rating,types," +
+      "primaryType,primaryTypeDisplayName,googleMapsUri,addressComponents," +
+      "regularOpeningHours,currentOpeningHours";
+    const detailsResponse = await fetch(`https://places.googleapis.com/v1/places/${cleanPlaceId}`, {
+      method: "GET",
+      headers: getPlacesHeaders(apiKey, fieldMask),
+    });
+    const detailsData = (await detailsResponse.json()) as {
+      id?: string;
+      name?: string;
+      displayName?: { text?: string };
+      formattedAddress?: string;
+      shortFormattedAddress?: string;
+      addressComponents?: Array<{ longText?: string; types?: string[] }>;
+      location?: { latitude?: number; longitude?: number };
+      rating?: number;
+      types?: string[];
+      googleMapsUri?: string;
+      regularOpeningHours?: {
+        weekdayDescriptions?: string[];
+        openNow?: boolean;
+        nextOpenTime?: string;
+        nextCloseTime?: string;
+      };
+      currentOpeningHours?: {
+        weekdayDescriptions?: string[];
+        openNow?: boolean;
+        nextOpenTime?: string;
+        nextCloseTime?: string;
+      };
+      error?: { message?: string };
+    };
+    if (!detailsResponse.ok) {
+      return jsonError(
+        res,
+        detailsResponse.status,
+        detailsData.error?.message || "Google Places details failed."
+      );
+    }
+    if (!detailsData.id && !detailsData.name) {
+      return jsonError(res, 404, "Place not found.");
+    }
+    const city = extractCityFromComponents(detailsData.addressComponents);
+    return res.status(200).json({
+      placeId: extractPlaceId(detailsData.id) || extractPlaceId(detailsData.name),
+      name: detailsData.displayName?.text || null,
+      address: detailsData.formattedAddress || detailsData.shortFormattedAddress || null,
+      city,
+      lat: detailsData.location?.latitude ?? null,
+      lng: detailsData.location?.longitude ?? null,
+      mapsUrl: detailsData.googleMapsUri ?? null,
+      googleRating: detailsData.rating ?? null,
+      types: detailsData.types ?? null,
+      openingHoursWeekdayDescriptions:
+        detailsData.regularOpeningHours?.weekdayDescriptions ||
+        detailsData.currentOpeningHours?.weekdayDescriptions ||
+        null,
+      openingHoursOpenNow:
+        detailsData.currentOpeningHours?.openNow ??
+        detailsData.regularOpeningHours?.openNow ??
+        null,
+      openingHoursNextOpenTime:
+        detailsData.currentOpeningHours?.nextOpenTime ??
+        detailsData.regularOpeningHours?.nextOpenTime ??
+        null,
+      openingHoursNextCloseTime:
+        detailsData.currentOpeningHours?.nextCloseTime ??
+        detailsData.regularOpeningHours?.nextCloseTime ??
+        null,
+    });
+  } catch (error) {
+    console.error("Google Places details failed", error);
+    return jsonError(res, 500, "Google Places details failed.");
+  }
+});
+
 const isoToSeconds = (iso: string): number => {
   const match = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
   if (!match) return 0;

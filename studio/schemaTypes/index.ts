@@ -1,5 +1,8 @@
 import { defineField, defineType } from "sanity";
 import YouTubeSearchInput from "../components/YouTubeSearchInput";
+import GooglePlaceSearchInput from "../components/GooglePlaceSearchInput";
+import InternalRatingStars from "../components/InternalRatingStars";
+import NearbyPlacesInput from "../components/NearbyPlacesInput";
 
 const duration = defineType({
   name: "duration",
@@ -283,6 +286,145 @@ const planPdf = defineType({
   ],
 });
 
+const googlePlace = defineType({
+  name: "googlePlace",
+  title: "Google Place",
+  type: "object",
+  fields: [
+    defineField({ name: "placeId", title: "Place ID", type: "string" }),
+    defineField({ name: "name", title: "Name", type: "string" }),
+    defineField({ name: "address", title: "Address", type: "string" }),
+    defineField({ name: "city", title: "City", type: "string" }),
+    defineField({ name: "lat", title: "Latitude", type: "number" }),
+    defineField({ name: "lng", title: "Longitude", type: "number" }),
+    defineField({ name: "mapsUrl", title: "Google Maps URL", type: "url" }),
+    defineField({ name: "googleRating", title: "Google Rating", type: "number" }),
+    defineField({
+      name: "openingHoursWeekdayDescriptions",
+      title: "Opening Hours",
+      type: "array",
+      of: [{ type: "string" }],
+      readOnly: true,
+    }),
+    defineField({
+      name: "openingHoursOpenNow",
+      title: "Open Now",
+      type: "boolean",
+      readOnly: true,
+    }),
+    defineField({
+      name: "openingHoursNextOpenTime",
+      title: "Next Open Time",
+      type: "string",
+      readOnly: true,
+    }),
+    defineField({
+      name: "openingHoursNextCloseTime",
+      title: "Next Close Time",
+      type: "string",
+      readOnly: true,
+    }),
+    defineField({
+      name: "types",
+      title: "Google Types",
+      type: "array",
+      of: [{ type: "string" }],
+    }),
+  ],
+});
+
+const gymLocation = defineType({
+  name: "gymLocation",
+  title: "Gym Location",
+  type: "document",
+  fields: [
+    defineField({
+      name: "place",
+      title: "Google Place",
+      type: "googlePlace",
+      components: {
+        input: GooglePlaceSearchInput,
+      },
+    }),
+    defineField({
+      name: "gymType",
+      title: "Type",
+      type: "string",
+      options: {
+        list: [
+          { title: "Commercial", value: "commercial" },
+          { title: "Local", value: "local" },
+          { title: "Outdoor", value: "outdoor" },
+        ],
+      },
+    }),
+    defineField({ name: "description", title: "Description", type: "text" }),
+    defineField({ name: "notes", title: "Notes", type: "text" }),
+    defineField({
+      name: "nearbyPlaces",
+      title: "Nearby Places",
+      type: "array",
+      of: [{ type: "reference", to: [{ type: "nearbyPlace" }] }],
+      components: {
+        input: NearbyPlacesInput,
+      },
+    }),
+    defineField({
+      name: "internalRating",
+      title: "Internal Rating",
+      type: "number",
+      components: {
+        input: InternalRatingStars,
+      },
+      validation: Rule => Rule.min(0).max(5),
+    }),
+  ],
+  preview: {
+    select: {
+      title: "place.name",
+      subtitle: "place.city",
+    },
+  },
+});
+
+const nearbyPlace = defineType({
+  name: "nearbyPlace",
+  title: "Nearby Place",
+  type: "document",
+  fields: [
+    defineField({
+      name: "place",
+      title: "Google Place",
+      type: "googlePlace",
+      components: {
+        input: GooglePlaceSearchInput,
+      },
+    }),
+    defineField({
+      name: "categories",
+      title: "Categories",
+      type: "array",
+      of: [{ type: "string" }],
+      options: {
+        list: [
+          { title: "Gym", value: "gym" },
+          { title: "Restaurant", value: "restaurant" },
+          { title: "Parking", value: "parking" },
+          { title: "Gas station", value: "gas_station" },
+          { title: "Campground", value: "campground" },
+          { title: "EV charging station", value: "electric_vehicle_charging_station" },
+        ],
+      },
+    }),
+  ],
+  preview: {
+    select: {
+      title: "place.name",
+      subtitle: "place.city",
+    },
+  },
+});
+
 const exerciseVideo = defineType({
   name: "exerciseVideo",
   title: "Exercise Video",
@@ -482,6 +624,9 @@ export const schemaTypes = [
   planDay,
   plan,
   planPdf,
+  googlePlace,
+  gymLocation,
+  nearbyPlace,
   exerciseVideo,
   exercise,
   affiliatePromotion,

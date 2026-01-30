@@ -37,4 +37,12 @@ export default () =>
         .title("Affiliate Promotions")
         .schemaType("affiliatePromotion")
         .child(S.documentTypeList("affiliatePromotion")),
+      S.listItem()
+        .title("Nearby Places")
+        .schemaType("nearbyPlace")
+        .child(S.documentTypeList("nearbyPlace")),
+      S.listItem()
+        .title("Gym Locations")
+        .schemaType("gymLocation")
+        .child(S.documentTypeList("gymLocation")),
     ]);

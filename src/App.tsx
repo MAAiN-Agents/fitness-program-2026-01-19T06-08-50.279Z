@@ -224,6 +224,34 @@ type AffiliatePromotion = {
   disclosure: string;
   copy: string;
 };
+type GooglePlace = {
+  placeId?: string | null;
+  name?: string | null;
+  address?: string | null;
+  city?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  mapsUrl?: string | null;
+  googleRating?: number | null;
+  types?: string[] | null;
+  openingHoursWeekdayDescriptions?: string[] | null;
+  openingHoursOpenNow?: boolean | null;
+  openingHoursNextOpenTime?: string | null;
+  openingHoursNextCloseTime?: string | null;
+};
+type GymLocation = {
+  id: string;
+  gymType?: string | null;
+  description?: string | null;
+  notes?: string | null;
+  internalRating?: number | null;
+  place?: GooglePlace | null;
+  nearbyPlaces?: Array<{
+    id: string;
+    categories?: string[] | null;
+    place?: GooglePlace | null;
+  }> | null;
+};
 type UserProfile = {
   id: string;
   userId: string;
@@ -1383,6 +1411,52 @@ async function fetchAffiliatePromotions(): Promise<AffiliatePromotion[]> {
   );
 }
 
+async function fetchGymLocations(): Promise<GymLocation[]> {
+  return sanityFetch(
+    `*[_type == "gymLocation"] | order(internalRating desc, _createdAt desc){
+      "id": _id,
+      gymType,
+      description,
+      notes,
+      internalRating,
+      "place": place{
+        placeId,
+        name,
+        address,
+        city,
+        lat,
+        lng,
+        mapsUrl,
+        googleRating,
+        openingHoursWeekdayDescriptions,
+        openingHoursOpenNow,
+        openingHoursNextOpenTime,
+        openingHoursNextCloseTime,
+        types
+      },
+      "nearbyPlaces": nearbyPlaces[]->{
+        "id": _id,
+        categories,
+        "place": place{
+          placeId,
+          name,
+          address,
+          city,
+          lat,
+          lng,
+          mapsUrl,
+          googleRating,
+          openingHoursWeekdayDescriptions,
+          openingHoursOpenNow,
+          openingHoursNextOpenTime,
+          openingHoursNextCloseTime,
+          types
+        }
+      }
+    }`
+  );
+}
+
 function useCMS(userId?: string) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<unknown | null>(null);
@@ -1408,6 +1482,7 @@ function useCMS(userId?: string) {
     getPlans: () => run(fetchPlans),
     getExercises: () => run(fetchExercises),
     getAffiliatePromotions: () => run(fetchAffiliatePromotions),
+    getGymLocations: () => run(fetchGymLocations),
   };
 }
 
@@ -1714,10 +1789,16 @@ function App() {
   const [processedStripeSession, setProcessedStripeSession] = useState<string | null>(null);
   const [pdfDetailOpen, setPdfDetailOpen] = useState(false);
   const [activePdfDetail, setActivePdfDetail] = useState<PlanPdf | null>(null);
+  const [gymDetailsOpen, setGymDetailsOpen] = useState(false);
+  const [activeGymLocation, setActiveGymLocation] = useState<GymLocation | null>(null);
+  const [gymFiltersOpen, setGymFiltersOpen] = useState(true);
+  const [gymPlaceTypeFilters, setGymPlaceTypeFilters] = useState<string[]>(["gym"]);
+  const [gymHoursExpanded, setGymHoursExpanded] = useState(false);
 
   const [plans, setPlans] = useState<Plan[]>([]);
   const [exerciseLibrary, setExerciseLibrary] = useState<Exercise[]>([]);
   const [affiliatePromotions, setAffiliatePromotions] = useState<AffiliatePromotion[]>([]);
+  const [gymLocations, setGymLocations] = useState<GymLocation[]>([]);
   const [progressEntries, setProgressEntries] = useState<ProgressEntry[]>([]);
   const [progressLoading, setProgressLoading] = useState(false);
   const exerciseById = useMemo<Record<string, Exercise>>(
@@ -1880,11 +1961,13 @@ function App() {
       cms.getPlans(),
       cms.getExercises(),
       cms.getAffiliatePromotions(),
-    ]).then(([planData, exerciseData, promoData]) => {
+      cms.getGymLocations(),
+    ]).then(([planData, exerciseData, promoData, gymData]) => {
       if (!active) return;
       setPlans(planData ?? []);
       setExerciseLibrary(exerciseData ?? []);
       setAffiliatePromotions(promoData ?? []);
+      setGymLocations(gymData ?? []);
     });
     return () => {
       active = false;
@@ -4318,34 +4401,382 @@ function App() {
   // ---- Affiliate Promotion ----
   function renderAffiliatePromotion() {
     const promo = affiliatePromotions[0];
-    if (!promo) {
+    const hasLocations = gymLocations.length > 0;
+    const placeTypeOptions = [
+      { value: "gym", label: "Gym", color: "#2f80ed" },
+      { value: "restaurant", label: "Restaurant", color: "#f2994a" },
+      { value: "parking", label: "Parking", color: "#9b51e0" },
+      { value: "gas_station", label: "Gas station", color: "#27ae60" },
+      { value: "campground", label: "Campground", color: "#f2c94c" },
+      { value: "electric_vehicle_charging_station", label: "EV charging", color: "#56ccf2" },
+    ];
+    const todayLabel = new Date().toLocaleDateString("en-US", { weekday: "long" });
+    const getTodayHours = (lines?: string[] | null) =>
+      (lines || []).find(line => line.startsWith(`${todayLabel}:`)) || null;
+    const getHoursList = (lines?: string[] | null) => (lines || []).filter(Boolean);
+    const getMapEmbedUrl = (place?: GooglePlace | null) => {
+      if (!place) return null;
+      if (typeof place.lat === "number" && typeof place.lng === "number") {
+        return `https://www.google.com/maps?q=${place.lat},${place.lng}&z=15&output=embed`;
+      }
+      if (place.address) {
+        return `https://www.google.com/maps?q=${encodeURIComponent(place.address)}&output=embed`;
+      }
+      if (place.name) {
+        return `https://www.google.com/maps?q=${encodeURIComponent(place.name)}&output=embed`;
+      }
       return null;
+    };
+    const formatGymType = (value?: string | null) =>
+      value ? value.charAt(0).toUpperCase() + value.slice(1) : null;
+    const activePlaceTypeFilters = new Set(gymPlaceTypeFilters);
+    const filteredNearbyPlaces = (activeGymLocation?.nearbyPlaces || []).filter(item => {
+      if (activePlaceTypeFilters.size === 0) return true;
+      const placeTypes = item.place?.types || [];
+      const categories = item.categories || [];
+      return (
+        placeTypes.some(type => activePlaceTypeFilters.has(type)) ||
+        categories.some(cat => activePlaceTypeFilters.has(cat))
+      );
+    });
+    const togglePlaceTypeFilter = (value: string) => {
+      setGymPlaceTypeFilters(prev => {
+        if (prev.includes(value)) {
+          return prev.filter(item => item !== value);
+        }
+        return [...prev, value];
+      });
+    };
+    const openGymDetails = (location: GymLocation) => {
+      setActiveGymLocation(location);
+      setGymDetailsOpen(true);
+      setGymHoursExpanded(false);
+    };
+    const closeGymDetails = () => {
+      setGymDetailsOpen(false);
+      setActiveGymLocation(null);
+      setGymHoursExpanded(false);
+    };
+    const mapUrl = getMapEmbedUrl(activeGymLocation?.place || null);
+    if (!promo && !hasLocations) {
+      return (
+        <Section data-component="AffiliatePromotion">
+          <SectionTitle>Gym Locations</SectionTitle>
+          <Card data-component="GymLocationsEmptyCard">
+            <div style={{ color: theme.colors.textSecondary }}>No gym locations added yet.</div>
+          </Card>
+        </Section>
+      );
     }
-    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(promo.url)}`;
+    const qrCodeUrl = promo
+      ? `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(promo.url)}`
+      : null;
     return (
       <Section data-component="AffiliatePromotion">
-        <Card data-component="PromotionCard" style={{ textAlign: "center" }}>
-          <div style={{ fontWeight: 600, color: theme.colors.accent2, marginBottom: 4 }}>Planet Fitness Promo</div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: theme.colors.primary, marginBottom: 6 }}>
-            $1/month deal for Nomadic Gym Life
-          </div>
-          <div style={{ marginBottom: 12 }}>{promo.copy}</div>
-          <Button data-component="AffiliateCTAButton" as="a" href={promo.url} target="_blank" rel="noopener noreferrer">
-            Get $1/month
-          </Button>
-          <div style={{ fontSize: 12, color: theme.colors.textSecondary, marginTop: 6 }}>{promo.disclosure}</div>
-          <div style={{ marginTop: 16, textAlign: 'center' }}>
-            <div style={{ fontSize: 12, color: theme.colors.textSecondary, marginBottom: 6 }}>Scan to open</div>
-            <img
-              src={qrCodeUrl}
-              alt="Planet Fitness QR Code"
-              width={110}
-              height={110}
-              style={{ borderRadius: 12, background: '#fff', border: `2px solid ${theme.colors.border}` }}
-              data-component="QRCodeImage"
-            />
-          </div>
-        </Card>
+        {promo && (
+          <Card data-component="PromotionCard" style={{ textAlign: "center" }}>
+            <div style={{ fontWeight: 600, color: theme.colors.accent2, marginBottom: 4 }}>Planet Fitness Promo</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: theme.colors.primary, marginBottom: 6 }}>
+              $1/month deal for Nomadic Gym Life
+            </div>
+            <div style={{ marginBottom: 12 }}>{promo.copy}</div>
+            <Button data-component="AffiliateCTAButton" as="a" href={promo.url} target="_blank" rel="noopener noreferrer">
+              Get $1/month
+            </Button>
+            <div style={{ fontSize: 12, color: theme.colors.textSecondary, marginTop: 6 }}>{promo.disclosure}</div>
+            {qrCodeUrl && (
+              <div style={{ marginTop: 16, textAlign: "center" }}>
+                <div style={{ fontSize: 12, color: theme.colors.textSecondary, marginBottom: 6 }}>Scan to open</div>
+                <img
+                  src={qrCodeUrl}
+                  alt="Planet Fitness QR Code"
+                  width={110}
+                  height={110}
+                  style={{ borderRadius: 12, background: "#fff", border: `2px solid ${theme.colors.border}` }}
+                  data-component="QRCodeImage"
+                />
+              </div>
+            )}
+          </Card>
+        )}
+        <SectionTitle>Gym Locations</SectionTitle>
+        {hasLocations ? (
+          gymLocations.map(location => {
+            const place = location.place;
+            const gymType = formatGymType(location.gymType);
+            const metaBits = [place?.city, gymType].filter(Boolean);
+            const openNowLabel =
+              typeof place?.openingHoursOpenNow === "boolean"
+                ? place.openingHoursOpenNow
+                  ? "Open now"
+                  : "Closed now"
+                : null;
+            const todaysHours = getTodayHours(place?.openingHoursWeekdayDescriptions);
+            const hoursList = getHoursList(place?.openingHoursWeekdayDescriptions);
+            return (
+              <Card key={location.id} data-component="GymLocationCard">
+                <div style={{ display: "grid", gap: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontWeight: 700 }}>{place?.name || "Gym location"}</div>
+                      {metaBits.length > 0 && (
+                        <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>
+                          {metaBits.join(" | ")}
+                        </div>
+                      )}
+                      {place?.address && (
+                        <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>{place.address}</div>
+                      )}
+                      {openNowLabel && (
+                        <div
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            padding: "2px 8px",
+                            borderRadius: 999,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            background: place?.openingHoursOpenNow ? "#e6f4ea" : "#fdecea",
+                            color: place?.openingHoursOpenNow ? "#1b5e20" : "#b71c1c",
+                            marginTop: 6,
+                          }}
+                        >
+                          {place?.openingHoursOpenNow ? "Open Now" : "Closed"}
+                        </div>
+                      )}
+                      {todaysHours && (
+                        <button
+                          type="button"
+                          onClick={() => setGymHoursExpanded(expanded => !expanded)}
+                          style={{
+                            marginTop: 4,
+                            border: "none",
+                            background: "none",
+                            padding: 0,
+                            cursor: "pointer",
+                            textAlign: "left",
+                            fontSize: 12,
+                            fontWeight: 700,
+                            color: theme.colors.primary,
+                          }}
+                        >
+                          {todaysHours}
+                        </button>
+                      )}
+                      {gymHoursExpanded && hoursList.length > 0 && (
+                        <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>
+                          {hoursList.map(line => (
+                            <div key={line}>{line}</div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ textAlign: "right", fontSize: 12, color: theme.colors.textSecondary }}>
+                      {typeof location.internalRating === "number" && (
+                        <div>Internal rating: {location.internalRating.toFixed(1)}</div>
+                      )}
+                      {typeof place?.googleRating === "number" && (
+                        <div>Google rating: {place.googleRating.toFixed(1)}</div>
+                      )}
+                    </div>
+                  </div>
+                  {location.description && <div>{location.description}</div>}
+                  {location.notes && (
+                    <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>{location.notes}</div>
+                  )}
+                  <div>
+                    <Button variant="secondary" onClick={() => openGymDetails(location)}>
+                      Details
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            );
+          })
+        ) : (
+          <Card data-component="GymLocationsEmptyCard">
+            <div style={{ color: theme.colors.textSecondary }}>No gym locations added yet.</div>
+          </Card>
+        )}
+        {gymDetailsOpen && activeGymLocation && (
+          <ModalOverlay
+            onClick={closeGymDetails}
+            style={{ alignItems: "flex-start", paddingTop: 48, paddingBottom: 24 }}
+          >
+            <Modal onClick={e => e.stopPropagation()} style={{ width: "min(860px, 94vw)", overflowY: "auto" }}>
+              <div style={{ display: "grid", gap: theme.spacing.md }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ display: "grid", gap: 4 }}>
+                    <div style={{ fontWeight: 700 }}>
+                      {activeGymLocation.place?.name || "Location details"}
+                    </div>
+                    {typeof activeGymLocation.place?.openingHoursOpenNow === "boolean" && (
+                      <div
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "2px 8px",
+                          borderRadius: 999,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          background: activeGymLocation.place.openingHoursOpenNow ? "#e6f4ea" : "#fdecea",
+                          color: activeGymLocation.place.openingHoursOpenNow ? "#1b5e20" : "#b71c1c",
+                          width: "fit-content",
+                        }}
+                      >
+                        {activeGymLocation.place.openingHoursOpenNow ? "Open Now" : "Closed"}
+                      </div>
+                    )}
+                    {getHoursList(activeGymLocation.place?.openingHoursWeekdayDescriptions).length > 0 && (
+                      <div style={{ display: "grid", gap: 2 }}>
+                        <button
+                          type="button"
+                          onClick={() => setGymHoursExpanded(expanded => !expanded)}
+                          style={{
+                            border: "none",
+                            background: "none",
+                            padding: 0,
+                            cursor: "pointer",
+                            textAlign: "left",
+                            fontSize: 12,
+                            fontWeight: 700,
+                            color: theme.colors.primary,
+                          }}
+                        >
+                          {getTodayHours(activeGymLocation.place?.openingHoursWeekdayDescriptions) || "Today: Hours"}
+                        </button>
+                        {gymHoursExpanded &&
+                          getHoursList(activeGymLocation.place?.openingHoursWeekdayDescriptions).map(line => (
+                            <div
+                              key={line}
+                              style={{
+                                fontSize: 12,
+                                color: line.startsWith(`${todayLabel}:`) ? theme.colors.primary : theme.colors.textSecondary,
+                                fontWeight: line.startsWith(`${todayLabel}:`) ? 700 : 400,
+                              }}
+                            >
+                              {line}
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <Button variant="secondary" onClick={closeGymDetails}>
+                      Close
+                    </Button>
+                  </div>
+                </div>
+                <div style={{ display: "grid", gap: theme.spacing.md }}>
+                  {mapUrl && (
+                    <div
+                      style={{
+                        position: "relative",
+                        borderRadius: theme.radii.card,
+                        overflow: "hidden",
+                        border: `1px solid ${theme.colors.border}`,
+                      }}
+                    >
+                      <iframe
+                        title={`Map of ${activeGymLocation.place?.name || "gym location"}`}
+                        src={mapUrl}
+                        width="100%"
+                        height={420}
+                        loading="lazy"
+                        style={{ border: 0, display: "block" }}
+                      />
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: 12,
+                          left: 12,
+                          display: "flex",
+                          gap: 8,
+                          flexWrap: "wrap",
+                          padding: 6,
+                          background: "rgba(255,255,255,0.9)",
+                          borderRadius: 12,
+                          border: `1px solid ${theme.colors.border}`,
+                        }}
+                      >
+                        {placeTypeOptions
+                          .filter(option => activePlaceTypeFilters.has(option.value))
+                          .map(option => (
+                            <div
+                              key={option.value}
+                              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+                            >
+                              <svg width="18" height="24" viewBox="0 0 24 34" aria-hidden="true">
+                                <path
+                                  d="M12 1C6.9 1 2.75 5.15 2.75 10.25c0 6.4 7.33 14.4 8.6 15.75.35.36.98.36 1.33 0 1.27-1.35 8.6-9.35 8.6-15.75C21.28 5.15 17.1 1 12 1z"
+                                  fill={option.color}
+                                />
+                                <circle cx="12" cy="10.5" r="3.5" fill="#fff" />
+                              </svg>
+                              <span style={{ fontSize: 12 }}>{option.label}</span>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                  <div style={{ display: "grid", gap: theme.spacing.sm }}>
+                    {activeGymLocation.place?.mapsUrl && (
+                      <Button
+                        as="a"
+                        href={activeGymLocation.place.mapsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Open in Google Maps
+                      </Button>
+                    )}
+                    <Button
+                      variant="secondary"
+                      onClick={() => setGymFiltersOpen(open => !open)}
+                    >
+                      {gymFiltersOpen ? "Hide nearby list" : "Show nearby list"}
+                    </Button>
+                  </div>
+                  {gymFiltersOpen && (
+                    <div style={{ display: "grid", gap: theme.spacing.sm }}>
+                      <div style={{ fontWeight: 700 }}>Nearby Filters</div>
+                      <div style={{ display: "grid", gap: 6 }}>
+                        {placeTypeOptions.map(option => {
+                          const active = activePlaceTypeFilters.has(option.value);
+                          return (
+                            <Button
+                              key={option.value}
+                              variant={active ? undefined : "secondary"}
+                              onClick={() => togglePlaceTypeFilter(option.value)}
+                              style={{ width: "100%", justifyContent: "flex-start", margin: 0 }}
+                            >
+                              {option.label}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                      <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>
+                        {filteredNearbyPlaces.length} nearby places
+                      </div>
+                      <div style={{ display: "grid", gap: 8 }}>
+                        {filteredNearbyPlaces.map(placeItem => (
+                          <Card key={placeItem.id} data-component="GymLocationListItem">
+                            <div style={{ fontWeight: 700 }}>{placeItem.place?.name || "Nearby place"}</div>
+                            {placeItem.place?.address && (
+                              <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>
+                                {placeItem.place.address}
+                              </div>
+                            )}
+                          </Card>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Modal>
+          </ModalOverlay>
+        )}
       </Section>
     );
   }
