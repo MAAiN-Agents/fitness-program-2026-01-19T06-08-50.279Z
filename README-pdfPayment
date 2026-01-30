@@ -1,0 +1,337 @@
+# Stripe Buy Button Payment Flow (PDF + Application Generator Case Study)
+
+This README documents the existing Stripe Buy Button flow in this repo (PDF purchase) and shows how to adapt it to sell **application generator access** as a case study. It is written so you can hand it to Codex to generate the full, end‑to‑end payment path.
+
+## What you get
+- An end‑to‑end flow: UI → Stripe Checkout → redirect → backend → Sanity
+- Concrete code examples from the current PDF purchase flow
+- A case study for selling access to an application generator
+- Security guidance for reliable, auditable entitlements in Sanity
+
+---
+
+## Current PDF purchase flow (what already exists)
+
+### 1) Sanity data model
+PDF products live in Sanity, and user entitlements are stored on the user profile.
+
+```ts
+// studio/schemaTypes/index.ts (excerpt)
+const planPdf = defineType({
+  name: "planPdf",
+  title: "Plan PDF",
+  type: "document",
+  fields: [
+    { name: "title", type: "string" },
+    { name: "format", type: "string" },
+    { name: "description", type: "string" },
+    { name: "buyButtonId", type: "string" },
+    { name: "buyButtonProductId", type: "string" },
+    { name: "file", type: "file" },
+    { name: "previewImage", type: "image" },
+  ],
+});
+
+const userProfile = defineType({
+  name: "userProfile",
+  title: "User Profile",
+  type: "document",
+  fields: [
+    { name: "userId", type: "string" },
+    { name: "email", type: "string" },
+    { name: "firebaseUid", type: "string" },
+    {
+      name: "purchasedPdfs",
+      type: "array",
+      of: [{ type: "reference", to: [{ type: "planPdf" }] }],
+    },
+  ],
+});
+```
+
+The important fields:
+- `planPdf.buyButtonId` → Stripe Buy Button ID (used by the frontend)
+- `planPdf.buyButtonProductId` → Stripe Product ID (used by the webhook)
+- `userProfile.purchasedPdfs` → entitlement list
+
+### 2) UI: open buy button + remember pending purchase
+When a user clicks Buy, the UI stores the pending PDF ID locally and opens a Stripe buy button modal.
+
+```tsx
+// src/App.tsx (excerpt)
+const handleStartPdfPurchase = (pdf: PlanPdf) => {
+  if (!pdf.id) return;
+  localStorage.setItem("pending_plan_pdf_id", pdf.id);
+  setPendingPurchasePdf(pdf);
+  if (document.referrer) {
+    localStorage.setItem("stripe_referrer", document.referrer);
+  }
+  if (!isAuthed) {
+    handleSignIn();
+    return;
+  }
+  setStripeModalOpen(true);
+};
+```
+
+The Stripe buy button uses the Sanity `buyButtonId` and passes identity fields to Stripe.
+
+```tsx
+// src/App.tsx (excerpt)
+<stripe-buy-button
+  client-reference-id={user?.uid}
+  customer-email={user?.email || undefined}
+  buy-button-id={pendingPurchasePdf.buyButtonId || "buy_btn_..."}
+  publishable-key="pk_live_..."
+/>
+```
+
+### 3) UI: after checkout redirect, tell backend which PDF was purchased
+Stripe redirects back with `session_id`. The UI uses it to call `/purchase` with the pending PDF ID.
+
+```tsx
+// src/App.tsx (excerpt)
+useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  const sessionId = params.get("session_id");
+  if (!sessionId || !isAuthed || processedStripeSession === sessionId) return;
+  const pendingPdfId = localStorage.getItem("pending_plan_pdf_id");
+  if (!pendingPdfId) return;
+  const origin = localStorage.getItem("stripe_referrer") || undefined;
+
+  api
+    .purchasePlanPdf({ sessionId, pdfId: pendingPdfId, origin })
+    .finally(() => {
+      setStripeModalOpen(false);
+      setPendingPurchasePdf(null);
+      setProcessedStripeSession(sessionId);
+      localStorage.removeItem("pending_plan_pdf_id");
+      params.delete("session_id");
+      window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}`);
+    });
+}, [api, isAuthed, processedStripeSession]);
+```
+
+### 4) Backend: write entitlement to Sanity (authenticated)
+The `/purchase` endpoint updates the profile with the PDF reference.
+
+```ts
+// functions/src/index.ts (excerpt)
+app.post("/purchase", requireAuth, async (req, res) => {
+  const { sessionId, pdfId, origin } = req.body as { sessionId?: string; pdfId?: string; origin?: string };
+  if (!pdfId) return jsonError(res, 400, "pdfId is required.");
+
+  const pdfDoc = await sanityClient.getDocument(pdfId);
+  if (!pdfDoc) return jsonError(res, 404, "PDF not found.");
+
+  // Create or patch userProfile with purchasedPdfs
+  // (idempotent: checks if already purchased)
+  // ...
+
+  return res.status(200).json(updatedProfile);
+});
+```
+
+### 5) Webhook: the authoritative Stripe confirmation
+The webhook verifies the signature, resolves the Stripe product ID → Sanity planPdf, then records the purchase.
+
+```ts
+// functions/src/index.ts (excerpt)
+app.post("/payments/pdfCheckoutCompleted", async (req, res) => {
+  const sig = req.get("stripe-signature");
+  const rawBody = (req as { rawBody?: Buffer }).rawBody;
+  if (!sig || !rawBody) return res.status(400).send("Webhook Error");
+
+  const event = stripe.webhooks.constructEvent(rawBody, sig, process.env.STRIPE_WEBHOOK_SECRET);
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object as Stripe.Checkout.Session;
+    const metadata = session.metadata || {};
+    let productId = metadata.productId || metadata.pdfProductId || metadata.buyButtonProductId;
+
+    const pdfDoc = await sanityClient.fetch(
+      `*[_type == "planPdf" && buyButtonProductId == $productId][0]{ _id }`,
+      { productId }
+    );
+
+    // Create or patch userProfile with purchasedPdfs
+    // (idempotent: checks if already purchased)
+    // ...
+  }
+
+  return res.status(200).json({ received: true });
+});
+```
+
+---
+
+## Case study: sell access to an Application Generator
+
+The goal: replace “PDF purchase” with “application generator access”. The mechanics stay the same:
+- **Stripe Buy Button** still handles checkout
+- **Sanity** stores products and entitlements
+- **Webhook** is authoritative
+
+### A) New Sanity schema for the generator product
+Add a new doc type for the product and store entitlements on the user profile.
+
+```ts
+// studio/schemaTypes/index.ts (new types)
+const appGeneratorProduct = defineType({
+  name: "appGeneratorProduct",
+  title: "App Generator Product",
+  type: "document",
+  fields: [
+    { name: "title", type: "string" },
+    { name: "description", type: "string" },
+    { name: "accessTier", type: "string" },
+    { name: "buyButtonId", type: "string" },
+    { name: "buyButtonProductId", type: "string" },
+  ],
+});
+
+// Extend userProfile
+const userProfile = defineType({
+  name: "userProfile",
+  title: "User Profile",
+  type: "document",
+  fields: [
+    // ...existing fields
+    {
+      name: "appGeneratorAccess",
+      title: "App Generator Access",
+      type: "array",
+      of: [{ type: "reference", to: [{ type: "appGeneratorProduct" }] }],
+    },
+  ],
+});
+```
+
+### B) UI: open buy button for generator product
+This mirrors PDF purchase. Use `buyButtonId` from Sanity and set `client-reference-id` + `customer-email`.
+
+```tsx
+const handleStartGeneratorPurchase = (product: AppGeneratorProduct) => {
+  if (!product.id) return;
+  localStorage.setItem("pending_app_generator_id", product.id);
+  setPendingGenerator(product);
+  if (!isAuthed) {
+    handleSignIn();
+    return;
+  }
+  setStripeModalOpen(true);
+};
+
+<stripe-buy-button
+  client-reference-id={user?.uid}
+  customer-email={user?.email || undefined}
+  buy-button-id={pendingGenerator.buyButtonId}
+  publishable-key={STRIPE_PUBLISHABLE_KEY}
+/>
+```
+
+### C) Client redirect handler
+When Stripe redirects back with `session_id`, call a backend endpoint that records the purchase (or use it only for UX). Keep the webhook as the source of truth.
+
+```ts
+api.purchaseAppGenerator({ sessionId, appGeneratorId: pendingId, origin });
+```
+
+### D) Backend: webhook‑first entitlement write
+This is the secure, authoritative step. Use the Stripe session to look up the Sanity product by `buyButtonProductId` and write to `userProfile.appGeneratorAccess`.
+
+```ts
+app.post("/payments/appGeneratorCheckoutCompleted", async (req, res) => {
+  const sig = req.get("stripe-signature");
+  const rawBody = (req as { rawBody?: Buffer }).rawBody;
+  if (!sig || !rawBody) return res.status(400).send("Webhook Error");
+
+  const event = stripe.webhooks.constructEvent(rawBody, sig, process.env.STRIPE_WEBHOOK_SECRET);
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object as Stripe.Checkout.Session;
+    const metadata = session.metadata || {};
+    const productId = metadata.productId || metadata.appGeneratorProductId;
+
+    const productDoc = await sanityClient.fetch(
+      `*[_type == "appGeneratorProduct" && buyButtonProductId == $productId][0]{ _id }`,
+      { productId }
+    );
+
+    // Create or patch userProfile.appGeneratorAccess
+    // (idempotent: check alreadyPurchased)
+    // ...
+  }
+
+  return res.status(200).json({ received: true });
+});
+```
+
+### E) Gate the application generator UI
+Use the user profile entitlements to unlock generator access.
+
+```tsx
+const hasGeneratorAccess = (userProfile?.appGeneratorAccess || []).some(p => p.id === generatorProductId);
+if (!hasGeneratorAccess) {
+  return <CallToActionToPurchase />;
+}
+```
+
+---
+
+## Security & correctness checklist
+
+Use this checklist when generating the end‑to‑end flow:
+
+- **Webhook is authoritative**: Treat `checkout.session.completed` as the source of truth.
+- **Verify Stripe signatures**: Use `stripe.webhooks.constructEvent` with raw body bytes.
+- **Idempotency**: If the user already has the entitlement, do nothing.
+- **Don’t trust client IDs**: Validate the Stripe product ID by querying Sanity.
+- **Avoid leaking secrets**: Keep `STRIPE_SECRET_KEY` server‑only; store publishable key in env for frontend.
+- **Tie the purchase to a user**: Use `client_reference_id` (Firebase UID) and/or `customer_email`.
+
+> Note: `/purchase` is helpful for instant UI feedback, but should not be the only system of record. Webhook writes should be treated as final.
+
+---
+
+## Environment variables
+These must exist for the backend to work:
+
+```bash
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+```
+
+Recommended for the frontend:
+
+```bash
+VITE_STRIPE_PUBLISHABLE_KEY=pk_live_...
+```
+
+---
+
+## How to use this README as a Codex prompt
+
+When asking Codex to build the full flow, provide:
+
+1) **The product type** (PDF or App Generator)
+2) **Sanity schema fields** to create/update
+3) **Frontend buy button** usage (with `buyButtonId`)
+4) **Webhook handler** with Stripe signature verification
+5) **Where to store entitlements** on `userProfile`
+
+Example prompt fragment:
+
+```
+Use the existing PDF purchase flow as the blueprint. Create a new payment path for the app generator:
+- Add Sanity schema for appGeneratorProduct and userProfile.appGeneratorAccess
+- Add UI to load Stripe buy button and capture session_id redirect
+- Add webhook endpoint that verifies Stripe signatures and writes access into Sanity
+- Ensure idempotency and protect secrets
+```
+
+---
+
+## File references in this repo
+
+- Frontend buy button + redirect handling: `src/App.tsx`
+- Backend purchase + webhook handlers: `functions/src/index.ts`
+- Sanity schemas: `studio/schemaTypes/index.ts`
