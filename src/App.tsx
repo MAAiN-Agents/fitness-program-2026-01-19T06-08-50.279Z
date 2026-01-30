@@ -4,7 +4,7 @@
 // All React components include data-component attributes.
 // Animation uses css helper from styled-components.
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@sanity/client";
 import styled, { createGlobalStyle, css } from "styled-components";
 import { useFirebaseAuth } from "./auth/FirebaseAuthContext";
@@ -15,8 +15,17 @@ import FitnessProgressTab, {
   type NutritionSummary,
 } from "./components/tabs/FitnessProgressTab";
 import ExerciseInstructionDisplay from "./components/ExerciseInstructionDisplay";
+import GymLocationMap from "./components/maps/GymLocationMap";
 
 const GA_ID = "G-EXCXY8B3LX";
+const PLACE_TYPE_OPTIONS = [
+  { value: "gym", label: "Gym", color: "#2f80ed" },
+  { value: "restaurant", label: "Restaurant", color: "#f2994a" },
+  { value: "parking", label: "Parking", color: "#9b51e0" },
+  { value: "gas_station", label: "Gas station", color: "#27ae60" },
+  { value: "campground", label: "Campground", color: "#f2c94c" },
+  { value: "electric_vehicle_charging_station", label: "EV charging", color: "#56ccf2" },
+];
 
 const sanityClient = createClient({
   projectId: process.env.REACT_APP_SANITY_PROJECT_ID || "",
@@ -84,7 +93,7 @@ type DataComponentProps = {
   'data-component'?: string;
 };
 type ButtonProps = DataComponentProps & {
-  variant?: 'primary' | 'secondary';
+  $variant?: 'primary' | 'secondary';
 };
 type LegendSwatchProps = {
   $color?: string;
@@ -95,10 +104,10 @@ type CalendarDayButtonProps = {
   $hasWorkout?: boolean;
 };
 type BottomNavTabProps = DataComponentProps & {
-  active?: boolean;
+  $active?: boolean;
 };
 type NavButtonProps = DataComponentProps & {
-  active?: boolean;
+  $active?: boolean;
   'aria-label'?: string;
 };
 type MacroKey = 'protein' | 'carbs' | 'fat';
@@ -364,10 +373,10 @@ const AppNav = styled.nav.attrs(dataComponent('AppNav'))`
 const NavTab = styled.button.attrs((props: NavButtonProps) => ({
   'data-component': 'NavTab',
   'aria-label': props['aria-label'],
-  'aria-current': props.active ? 'page' : undefined,
+  'aria-current': props.$active ? 'page' : undefined,
 } as Record<string, unknown>))<NavButtonProps>`
   background: none;
-  color: ${props => props.active ? theme.colors.navActive : theme.colors.navText};
+  color: ${props => props.$active ? theme.colors.navActive : theme.colors.navText};
   border: none;
   font: ${theme.font.button};
   padding: ${theme.spacing.sm} ${theme.spacing.md};
@@ -601,9 +610,9 @@ const SectionTitle = styled.h2.attrs(() => ({
   margin: 0 0 ${theme.spacing.sm} 0;
 `;
 const Button = styled.button.attrs(dataComponent('Button'))<ButtonProps>`
-  background: ${props => props.variant === 'secondary' ? 'transparent' : theme.colors.accent};
-  color: ${props => props.variant === 'secondary' ? theme.colors.primary : theme.colors.text};
-  border: ${props => props.variant === 'secondary' ? `2px solid ${theme.colors.primary}` : 'none'};
+  background: ${props => props.$variant === 'secondary' ? 'transparent' : theme.colors.accent};
+  color: ${props => props.$variant === 'secondary' ? theme.colors.primary : theme.colors.text};
+  border: ${props => props.$variant === 'secondary' ? `2px solid ${theme.colors.primary}` : 'none'};
   border-radius: ${theme.radii.button};
   font: ${theme.font.button};
   padding: ${theme.spacing.sm} ${theme.spacing.lg};
@@ -885,11 +894,11 @@ const BottomNav = styled.nav.attrs(dataComponent('BottomNav'))`
 const BottomNavTab = styled.button.attrs((props) => ({
   'data-component': 'BottomNavTab',
   'aria-label': props['aria-label'],
-  'aria-current': (props as BottomNavTabProps).active ? 'page' : undefined,
+  'aria-current': (props as BottomNavTabProps).$active ? 'page' : undefined,
 } as Record<string, unknown>))<BottomNavTabProps>`
   background: none;
   border: none;
-  color: ${props => props.active ? theme.colors.navActive : theme.colors.primary};
+  color: ${props => props.$active ? theme.colors.navActive : theme.colors.primary};
   font-size: 0.75rem;
   font-weight: 700;
   line-height: 1.1;
@@ -1791,9 +1800,10 @@ function App() {
   const [activePdfDetail, setActivePdfDetail] = useState<PlanPdf | null>(null);
   const [gymDetailsOpen, setGymDetailsOpen] = useState(false);
   const [activeGymLocation, setActiveGymLocation] = useState<GymLocation | null>(null);
-  const [gymFiltersOpen, setGymFiltersOpen] = useState(true);
   const [gymPlaceTypeFilters, setGymPlaceTypeFilters] = useState<string[]>(["gym"]);
   const [gymHoursExpanded, setGymHoursExpanded] = useState(false);
+  const [gymFiltersMenuOpen, setGymFiltersMenuOpen] = useState(false);
+  const [selectedNearbyPlaceId, setSelectedNearbyPlaceId] = useState<string | null>(null);
 
   const [plans, setPlans] = useState<Plan[]>([]);
   const [exerciseLibrary, setExerciseLibrary] = useState<Exercise[]>([]);
@@ -2490,7 +2500,7 @@ function App() {
       </CalendarLegend>
       {showClose && (
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: theme.spacing.sm }}>
-          <Button variant="secondary" onClick={onClose}>Close</Button>
+          <Button $variant="secondary" onClick={onClose}>Close</Button>
         </div>
       )}
     </>
@@ -2520,7 +2530,7 @@ function App() {
             ].map(item => (
               <DrawerTabButton
                 key={item.label}
-                variant={tab === item.index ? undefined : "secondary"}
+                $variant={tab === item.index ? undefined : "secondary"}
                 onClick={() => {
                   setTab(item.index);
                   setProfileOpen(false);
@@ -2619,7 +2629,7 @@ function App() {
                       </div>
                       <IconButton
                         data-component="MacroEqualizerButton"
-                        variant="secondary"
+                        $variant="secondary"
                         onClick={() => setProfileMacroPercentsDraft({ protein: 40, carbs: 40, fat: 20 })}
                         title="Reset to default split"
                       >
@@ -2655,7 +2665,7 @@ function App() {
                 </LoadingButton>
                   </>
                 )}
-                <AuthButton variant="secondary" onClick={handleSignOut}>Sign out</AuthButton>
+                <AuthButton $variant="secondary" onClick={handleSignOut}>Sign out</AuthButton>
                 {authError && <AuthGateText>{authError}</AuthGateText>}
               </ProfileFormRow>
               {profileCaloriesPad !== null && (
@@ -2669,12 +2679,12 @@ function App() {
                           {digit}
                         </NumberPadButton>
                       ))}
-                      <NumberPadButton variant="secondary" onClick={handleProfileCaloriesClear}>C</NumberPadButton>
+                      <NumberPadButton $variant="secondary" onClick={handleProfileCaloriesClear}>C</NumberPadButton>
                       <NumberPadButton onClick={() => handleProfileCaloriesDigit("0")}>0</NumberPadButton>
-                      <NumberPadButton variant="secondary" onClick={handleProfileCaloriesBackspace}>⌫</NumberPadButton>
+                      <NumberPadButton $variant="secondary" onClick={handleProfileCaloriesBackspace}>⌫</NumberPadButton>
                     </NumberPadGrid>
                     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-                      <Button variant="secondary" onClick={() => setProfileCaloriesPad(null)}>Cancel</Button>
+                      <Button $variant="secondary" onClick={() => setProfileCaloriesPad(null)}>Cancel</Button>
                       <LoadingButton onClick={handleProfileCaloriesSave} disabled={api.loading}>
                         {api.loading && <SpinnerDot />}
                         Done
@@ -2771,7 +2781,7 @@ function App() {
                       <td key={time} data-component="WeekTableSessionCell">
                         {sessions.length === 0 ? (
                           <SessionCellButton
-                            variant="secondary"
+                            $variant="secondary"
                             onClick={() => setSessionModal({ session: null, day, time })}
                             aria-label={`Open session for ${day} ${time}`}
                           >
@@ -2783,7 +2793,7 @@ function App() {
                               <SessionCellButton
                                 key={session.id}
                                 data-component="SessionCellButton"
-                                variant={session.entries.length > 0 ? "primary" : "secondary"}
+                                $variant={session.entries.length > 0 ? "primary" : "secondary"}
                                 onClick={() => setSessionModal({ session, day, time })}
                                 aria-label={`Open session for ${day} ${time}`}
                               >
@@ -2880,7 +2890,7 @@ function App() {
                               <PlanSessionLabel>{stripSessionTime(session.label) || session.label}</PlanSessionLabel>
                               <PlanExerciseMeta>{session.entries.length} exercises</PlanExerciseMeta>
                             </div>
-                            <Button variant="secondary" onClick={() => openSession(session, time)}>
+                            <Button $variant="secondary" onClick={() => openSession(session, time)}>
                               Edit
                             </Button>
                           </div>
@@ -2893,7 +2903,7 @@ function App() {
             })}
           </DailyModalBody>
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <Button variant="secondary" onClick={onClose}>Close</Button>
+            <Button $variant="secondary" onClick={onClose}>Close</Button>
           </div>
         </DailyModal>
       </ModalOverlay>
@@ -3135,12 +3145,12 @@ function App() {
                       </select>
                     </div>
                   ))}
-                  <Button data-component="AddSetButton" variant="secondary" onClick={() => setNewSets([...newSets, { weight: "", reps: "", rpe: "", durationValue: "", durationUnit: "min" }])}>+ Set</Button>
+                  <Button data-component="AddSetButton" $variant="secondary" onClick={() => setNewSets([...newSets, { weight: "", reps: "", rpe: "", durationValue: "", durationUnit: "min" }])}>+ Set</Button>
                   <LoadingButton data-component="SaveExerciseButton" onClick={addEntry} disabled={api.loading}>
                     {api.loading && <SpinnerDot />}
                     Save Exercise
                   </LoadingButton>
-                  <Button data-component="CancelAddExerciseButton" variant="secondary" onClick={() => setAdding(false)}>Cancel</Button>
+                  <Button data-component="CancelAddExerciseButton" $variant="secondary" onClick={() => setAdding(false)}>Cancel</Button>
                 </Card>
               )}
             </>
@@ -3166,7 +3176,7 @@ function App() {
                     </div>
                     <IconButton
                       data-component="ToggleExerciseButton"
-                      variant="secondary"
+                      $variant="secondary"
                       onClick={() => toggleEntryCollapsed(entry.id)}
                     >
                       {isCollapsed ? <PlusIcon /> : <MinusIcon />}
@@ -3268,12 +3278,12 @@ function App() {
                     {digit}
                   </NumberPadButton>
                 ))}
-                <NumberPadButton variant="secondary" onClick={handleNumberClear}>C</NumberPadButton>
+                <NumberPadButton $variant="secondary" onClick={handleNumberClear}>C</NumberPadButton>
                 <NumberPadButton onClick={() => handleNumberPress("0")}>0</NumberPadButton>
-                <NumberPadButton variant="secondary" onClick={handleNumberBackspace}>⌫</NumberPadButton>
+                <NumberPadButton $variant="secondary" onClick={handleNumberBackspace}>⌫</NumberPadButton>
               </NumberPadGrid>
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-                <Button variant="secondary" onClick={() => setNumberPad(null)}>Cancel</Button>
+                <Button $variant="secondary" onClick={() => setNumberPad(null)}>Cancel</Button>
                   <LoadingButton onClick={handleNumberSave} disabled={api.loading}>
                     {api.loading && <SpinnerDot />}
                     Done
@@ -3423,7 +3433,7 @@ function App() {
           />
           <DatePager>
             <DatePagerButton
-              variant="secondary"
+              $variant="secondary"
               onClick={() => prevNutritionDate && handleSelectDate(prevNutritionDate)}
               disabled={!prevNutritionDate}
             >
@@ -3431,14 +3441,14 @@ function App() {
             </DatePagerButton>
             <LoadingButton
               data-component="AddNutritionDateButton"
-              variant="secondary"
+              $variant="secondary"
               onClick={addNutritionDate}
             >
               {api.loading && <SpinnerDot />}
               Add Date
             </LoadingButton>
             <DatePagerButton
-              variant="secondary"
+              $variant="secondary"
               onClick={() => nextNutritionDate && handleSelectDate(nextNutritionDate)}
               disabled={!nextNutritionDate}
             >
@@ -3452,13 +3462,13 @@ function App() {
               <MacroLabel>Goal Macros</MacroLabel>
               <div style={{ display: "flex", gap: 8 }}>
                 <Button
-                  variant={nutritionUnit === "grams" ? undefined : "secondary"}
+                  $variant={nutritionUnit === "grams" ? undefined : "secondary"}
                   onClick={() => setNutritionUnit("grams")}
                 >
                   Grams
                 </Button>
                 <Button
-                  variant={nutritionUnit === "percent" ? undefined : "secondary"}
+                  $variant={nutritionUnit === "percent" ? undefined : "secondary"}
                   onClick={() => setNutritionUnit("percent")}
                 >
                   Percent
@@ -3626,7 +3636,7 @@ function App() {
                   }
                 />
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-                  <Button variant="secondary" onClick={() => setMacroSliderPad(null)}>Cancel</Button>
+                  <Button $variant="secondary" onClick={() => setMacroSliderPad(null)}>Cancel</Button>
                   <LoadingButton onClick={handleMacroSliderSave} disabled={api.loading}>
                     {api.loading && <SpinnerDot />}
                     Done
@@ -3678,7 +3688,7 @@ function App() {
             <Button
               key={cat}
               data-component="PlanCategoryTab"
-              variant={planCategory === cat ? undefined : "secondary"}
+              $variant={planCategory === cat ? undefined : "secondary"}
               onClick={() => setPlanCategory(cat)}
             >
               {cat}
@@ -3765,7 +3775,7 @@ function App() {
                                 href={pdf.fileUrl || undefined}
                                 target="_blank"
                                 rel="noreferrer"
-                                variant="secondary"
+                                $variant="secondary"
                                 style={{ textDecoration: "none" }}
                               >
                                 Download
@@ -3782,7 +3792,7 @@ function App() {
                               {isOwned && <PlanPdfBadge>Owned</PlanPdfBadge>}
                               <IconButton
                                 data-component="PlanPdfDetailButton"
-                                variant="secondary"
+                                $variant="secondary"
                                 aria-label="View PDF details"
                                 onClick={() => handleOpenPdfDetail(pdf)}
                                 title="View PDF details"
@@ -3823,19 +3833,19 @@ function App() {
                 </select>
                 <PlanFilterLabel>Time</PlanFilterLabel>
                 <PlanFilterToggle
-                  variant={planTimeFilters.am ? undefined : "secondary"}
+                  $variant={planTimeFilters.am ? undefined : "secondary"}
                   onClick={() => setPlanTimeFilters(prev => ({ ...prev, am: !prev.am }))}
                 >
                   AM
                 </PlanFilterToggle>
                 <PlanFilterToggle
-                  variant={planTimeFilters.pm ? undefined : "secondary"}
+                  $variant={planTimeFilters.pm ? undefined : "secondary"}
                   onClick={() => setPlanTimeFilters(prev => ({ ...prev, pm: !prev.pm }))}
                 >
                   PM
                 </PlanFilterToggle>
                 <PlanFilterToggle
-                  variant={planFiltersOpen ? undefined : "secondary"}
+                  $variant={planFiltersOpen ? undefined : "secondary"}
                   onClick={() => setPlanFiltersOpen(prev => !prev)}
                 >
                   Filters
@@ -3988,7 +3998,7 @@ function App() {
               {!isAuthed && <AuthHint>Sign in to inject this plan into your tracker.</AuthHint>}
               <Button
                 data-component="ClosePlanModalButton"
-                variant="secondary"
+                $variant="secondary"
                 onClick={() => {
                   setSelectedPlan(null);
                 }}
@@ -4029,7 +4039,7 @@ function App() {
                 ))}
               </select>
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-                <Button variant="secondary" onClick={() => setInjectModalOpen(false)}>Cancel</Button>
+                <Button $variant="secondary" onClick={() => setInjectModalOpen(false)}>Cancel</Button>
                 <LoadingButton onClick={handleConfirmInjectPlan} disabled={!isAuthed || authLoading || api.loading}>
                   {(api.loading || authLoading) && <SpinnerDot />}
                   Inject
@@ -4083,7 +4093,7 @@ function App() {
           <Button
             data-component="AddExerciseButton"
             onClick={() => setExerciseSearchOpen(true)}
-            variant="secondary"
+            $variant="secondary"
           >
             Add Exercise
           </Button>
@@ -4098,13 +4108,13 @@ function App() {
         <PlanFilterRow>
           <PlanFilterLabel>Filters</PlanFilterLabel>
           <PlanFilterToggle
-            variant={libraryFiltersOpen ? undefined : "secondary"}
+            $variant={libraryFiltersOpen ? undefined : "secondary"}
             onClick={() => setLibraryFiltersOpen(prev => !prev)}
           >
             Exercises
           </PlanFilterToggle>
           <PlanFilterToggle
-            variant="secondary"
+            $variant="secondary"
             onClick={() => {
               setLibraryTypeFilters([]);
               setLibraryYogaFilters([]);
@@ -4339,7 +4349,7 @@ function App() {
                 placeholder="e.g. dumbbell, barbell"
               />
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-                <Button variant="secondary" onClick={() => setExerciseSearchOpen(false)}>Close</Button>
+                <Button $variant="secondary" onClick={() => setExerciseSearchOpen(false)}>Close</Button>
                 <LoadingButton onClick={handleExerciseSearch} disabled={exerciseApi.loading}>
                   {exerciseApi.loading && <SpinnerDot />}
                   Search
@@ -4398,47 +4408,84 @@ function App() {
     );
   }
 
+  const googleMapsApiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "";
+  const getTypeColor = useCallback((categories?: string[] | null, types?: string[] | null) => {
+    const source = [...(categories || []), ...(types || [])];
+    const match = PLACE_TYPE_OPTIONS.find(option => source.includes(option.value));
+    return match?.color || "#2d3436";
+  }, []);
+  const todayLabel = new Date().toLocaleDateString("en-US", { weekday: "long" });
+  const getTodayHours = (lines?: string[] | null) =>
+    (lines || []).find(line => line.startsWith(`${todayLabel}:`)) || null;
+  const getHoursList = (lines?: string[] | null) => (lines || []).filter(Boolean);
+  const getMapEmbedUrl = (place?: GooglePlace | null) => {
+    if (!place) return null;
+    if (typeof place.lat === "number" && typeof place.lng === "number") {
+      return `https://www.google.com/maps?q=${place.lat},${place.lng}&z=15&output=embed`;
+    }
+    if (place.address) {
+      return `https://www.google.com/maps?q=${encodeURIComponent(place.address)}&output=embed`;
+    }
+    if (place.name) {
+      return `https://www.google.com/maps?q=${encodeURIComponent(place.name)}&output=embed`;
+    }
+    return null;
+  };
+  const formatGymType = (value?: string | null) =>
+    value ? value.charAt(0).toUpperCase() + value.slice(1) : null;
+  const activePlaceTypeFilters = useMemo(() => new Set(gymPlaceTypeFilters), [gymPlaceTypeFilters]);
+  const filteredNearbyPlaces = useMemo(
+    () =>
+      (activeGymLocation?.nearbyPlaces || []).filter(item => {
+        if (activePlaceTypeFilters.size === 0) return true;
+        const placeTypes = item.place?.types || [];
+        const categories = item.categories || [];
+        return (
+          placeTypes.some(type => activePlaceTypeFilters.has(type)) ||
+          categories.some(cat => activePlaceTypeFilters.has(cat))
+        );
+      }),
+    [activeGymLocation, activePlaceTypeFilters]
+  );
+  const mapMarkers = useMemo(() => {
+    const markers: Array<{ lat: number; lng: number; title: string; color: string; scale: number }> = [];
+    const lat = activeGymLocation?.place?.lat;
+    const lng = activeGymLocation?.place?.lng;
+    if (typeof lat === "number" && typeof lng === "number") {
+      markers.push({
+        lat,
+        lng,
+        title: activeGymLocation?.place?.name || "Gym location",
+        color: "#111827",
+        scale: 1,
+        isDimmed: false,
+      });
+    }
+    filteredNearbyPlaces.forEach(item => {
+      const pLat = item.place?.lat;
+      const pLng = item.place?.lng;
+      if (typeof pLat !== "number" || typeof pLng !== "number") return;
+      const shouldDim = selectedNearbyPlaceId ? item.id !== selectedNearbyPlaceId : false;
+      markers.push({
+        lat: pLat,
+        lng: pLng,
+        title: item.place?.name || "Nearby place",
+        color: getTypeColor(item.categories || null, item.place?.types || null),
+        scale: 0.9,
+        isDimmed: shouldDim,
+      });
+    });
+    return markers;
+  }, [activeGymLocation, filteredNearbyPlaces, getTypeColor, selectedNearbyPlaceId]);
+  const legendOptions = useMemo(
+    () => PLACE_TYPE_OPTIONS.filter(option => activePlaceTypeFilters.has(option.value)),
+    [activePlaceTypeFilters]
+  );
+
   // ---- Affiliate Promotion ----
   function renderAffiliatePromotion() {
     const promo = affiliatePromotions[0];
     const hasLocations = gymLocations.length > 0;
-    const placeTypeOptions = [
-      { value: "gym", label: "Gym", color: "#2f80ed" },
-      { value: "restaurant", label: "Restaurant", color: "#f2994a" },
-      { value: "parking", label: "Parking", color: "#9b51e0" },
-      { value: "gas_station", label: "Gas station", color: "#27ae60" },
-      { value: "campground", label: "Campground", color: "#f2c94c" },
-      { value: "electric_vehicle_charging_station", label: "EV charging", color: "#56ccf2" },
-    ];
-    const todayLabel = new Date().toLocaleDateString("en-US", { weekday: "long" });
-    const getTodayHours = (lines?: string[] | null) =>
-      (lines || []).find(line => line.startsWith(`${todayLabel}:`)) || null;
-    const getHoursList = (lines?: string[] | null) => (lines || []).filter(Boolean);
-    const getMapEmbedUrl = (place?: GooglePlace | null) => {
-      if (!place) return null;
-      if (typeof place.lat === "number" && typeof place.lng === "number") {
-        return `https://www.google.com/maps?q=${place.lat},${place.lng}&z=15&output=embed`;
-      }
-      if (place.address) {
-        return `https://www.google.com/maps?q=${encodeURIComponent(place.address)}&output=embed`;
-      }
-      if (place.name) {
-        return `https://www.google.com/maps?q=${encodeURIComponent(place.name)}&output=embed`;
-      }
-      return null;
-    };
-    const formatGymType = (value?: string | null) =>
-      value ? value.charAt(0).toUpperCase() + value.slice(1) : null;
-    const activePlaceTypeFilters = new Set(gymPlaceTypeFilters);
-    const filteredNearbyPlaces = (activeGymLocation?.nearbyPlaces || []).filter(item => {
-      if (activePlaceTypeFilters.size === 0) return true;
-      const placeTypes = item.place?.types || [];
-      const categories = item.categories || [];
-      return (
-        placeTypes.some(type => activePlaceTypeFilters.has(type)) ||
-        categories.some(cat => activePlaceTypeFilters.has(cat))
-      );
-    });
     const togglePlaceTypeFilter = (value: string) => {
       setGymPlaceTypeFilters(prev => {
         if (prev.includes(value)) {
@@ -4451,11 +4498,15 @@ function App() {
       setActiveGymLocation(location);
       setGymDetailsOpen(true);
       setGymHoursExpanded(false);
+      setGymFiltersMenuOpen(false);
+      setSelectedNearbyPlaceId(null);
     };
     const closeGymDetails = () => {
       setGymDetailsOpen(false);
       setActiveGymLocation(null);
       setGymHoursExpanded(false);
+      setGymFiltersMenuOpen(false);
+      setSelectedNearbyPlaceId(null);
     };
     const mapUrl = getMapEmbedUrl(activeGymLocation?.place || null);
     if (!promo && !hasLocations) {
@@ -4585,7 +4636,7 @@ function App() {
                     <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>{location.notes}</div>
                   )}
                   <div>
-                    <Button variant="secondary" onClick={() => openGymDetails(location)}>
+                    <Button $variant="secondary" onClick={() => openGymDetails(location)}>
                       Details
                     </Button>
                   </div>
@@ -4661,64 +4712,70 @@ function App() {
                       </div>
                     )}
                   </div>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <Button variant="secondary" onClick={closeGymDetails}>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    <div style={{ position: "relative" }}>
+                      <IconButton
+                        aria-label="Filter nearby places"
+                        onClick={() => setGymFiltersMenuOpen(open => !open)}
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                        </svg>
+                      </IconButton>
+                      {gymFiltersMenuOpen && (
+                        <div
+                          style={{
+                            position: "absolute",
+                            right: 0,
+                            top: "calc(100% + 8px)",
+                            zIndex: theme.z.modal + 1,
+                            background: theme.colors.card,
+                            border: `1px solid ${theme.colors.border}`,
+                            borderRadius: theme.radii.card,
+                            boxShadow: theme.shadow.card,
+                            padding: theme.spacing.sm,
+                            minWidth: 220,
+                          }}
+                        >
+                          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Filter by type</div>
+                          <div style={{ display: "grid", gap: 6 }}>
+                            {PLACE_TYPE_OPTIONS.map(option => {
+                              const checked = gymPlaceTypeFilters.includes(option.value);
+                              return (
+                                <label
+                                  key={option.value}
+                                  style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => togglePlaceTypeFilter(option.value)}
+                                  />
+                                  <span>{option.label}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <Button $variant="secondary" onClick={closeGymDetails}>
                       Close
                     </Button>
                   </div>
                 </div>
                 <div style={{ display: "grid", gap: theme.spacing.md }}>
-                  {mapUrl && (
-                    <div
-                      style={{
-                        position: "relative",
-                        borderRadius: theme.radii.card,
-                        overflow: "hidden",
-                        border: `1px solid ${theme.colors.border}`,
-                      }}
-                    >
-                      <iframe
-                        title={`Map of ${activeGymLocation.place?.name || "gym location"}`}
-                        src={mapUrl}
-                        width="100%"
-                        height={420}
-                        loading="lazy"
-                        style={{ border: 0, display: "block" }}
-                      />
-                      <div
-                        style={{
-                          position: "absolute",
-                          top: 12,
-                          left: 12,
-                          display: "flex",
-                          gap: 8,
-                          flexWrap: "wrap",
-                          padding: 6,
-                          background: "rgba(255,255,255,0.9)",
-                          borderRadius: 12,
-                          border: `1px solid ${theme.colors.border}`,
-                        }}
-                      >
-                        {placeTypeOptions
-                          .filter(option => activePlaceTypeFilters.has(option.value))
-                          .map(option => (
-                            <div
-                              key={option.value}
-                              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
-                            >
-                              <svg width="18" height="24" viewBox="0 0 24 34" aria-hidden="true">
-                                <path
-                                  d="M12 1C6.9 1 2.75 5.15 2.75 10.25c0 6.4 7.33 14.4 8.6 15.75.35.36.98.36 1.33 0 1.27-1.35 8.6-9.35 8.6-15.75C21.28 5.15 17.1 1 12 1z"
-                                  fill={option.color}
-                                />
-                                <circle cx="12" cy="10.5" r="3.5" fill="#fff" />
-                              </svg>
-                              <span style={{ fontSize: 12 }}>{option.label}</span>
-                            </div>
-                          ))}
-                      </div>
-                    </div>
-                  )}
+                  <GymLocationMap
+                    key={`${gymDetailsOpen}-${activeGymLocation?.id || "gym-map"}`}
+                    apiKey={googleMapsApiKey}
+                    mapUrl={mapUrl}
+                    title={`Map of ${activeGymLocation.place?.name || "gym location"}`}
+                    markers={mapMarkers}
+                    legendOptions={legendOptions}
+                    height={420}
+                    borderColor={theme.colors.border}
+                    borderRadius={theme.radii.card}
+                  />
                   <div style={{ display: "grid", gap: theme.spacing.sm }}>
                     {activeGymLocation.place?.mapsUrl && (
                       <Button
@@ -4730,48 +4787,36 @@ function App() {
                         Open in Google Maps
                       </Button>
                     )}
-                    <Button
-                      variant="secondary"
-                      onClick={() => setGymFiltersOpen(open => !open)}
-                    >
-                      {gymFiltersOpen ? "Hide nearby list" : "Show nearby list"}
-                    </Button>
                   </div>
-                  {gymFiltersOpen && (
-                    <div style={{ display: "grid", gap: theme.spacing.sm }}>
-                      <div style={{ fontWeight: 700 }}>Nearby Filters</div>
-                      <div style={{ display: "grid", gap: 6 }}>
-                        {placeTypeOptions.map(option => {
-                          const active = activePlaceTypeFilters.has(option.value);
-                          return (
-                            <Button
-                              key={option.value}
-                              variant={active ? undefined : "secondary"}
-                              onClick={() => togglePlaceTypeFilter(option.value)}
-                              style={{ width: "100%", justifyContent: "flex-start", margin: 0 }}
-                            >
-                              {option.label}
-                            </Button>
-                          );
-                        })}
-                      </div>
-                      <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>
-                        {filteredNearbyPlaces.length} nearby places
-                      </div>
-                      <div style={{ display: "grid", gap: 8 }}>
-                        {filteredNearbyPlaces.map(placeItem => (
-                          <Card key={placeItem.id} data-component="GymLocationListItem">
-                            <div style={{ fontWeight: 700 }}>{placeItem.place?.name || "Nearby place"}</div>
-                            {placeItem.place?.address && (
-                              <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>
-                                {placeItem.place.address}
-                              </div>
-                            )}
-                          </Card>
-                        ))}
-                      </div>
+                  <div style={{ display: "grid", gap: theme.spacing.sm }}>
+                    <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>
+                      {filteredNearbyPlaces.length} nearby places
                     </div>
-                  )}
+                    <div style={{ display: "grid", gap: 8 }}>
+                      {filteredNearbyPlaces.map(placeItem => (
+                        <Card
+                          key={placeItem.id}
+                          data-component="GymLocationListItem"
+                          onClick={() =>
+                            setSelectedNearbyPlaceId(prev => (prev === placeItem.id ? null : placeItem.id))
+                          }
+                          style={{
+                            cursor: "pointer",
+                            border: selectedNearbyPlaceId === placeItem.id
+                              ? `2px solid ${theme.colors.accent}`
+                              : `1px solid ${theme.colors.border}`,
+                          }}
+                        >
+                          <div style={{ fontWeight: 700 }}>{placeItem.place?.name || "Nearby place"}</div>
+                          {placeItem.place?.address && (
+                            <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>
+                              {placeItem.place.address}
+                            </div>
+                          )}
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             </Modal>
@@ -4788,12 +4833,12 @@ function App() {
       <AppBar>
         <AppLogo>🏕️ Nomad@Gym</AppLogo>
         <AppNav>
-          <NavTab active={tab === 0} onClick={() => setTab(0)} aria-label="Fitness Tracker">Tracker</NavTab>
-          <NavTab active={tab === 1} onClick={() => setTab(1)} aria-label="Nutrition">Nutrition</NavTab>
-          <NavTab active={tab === 2} onClick={() => setTab(2)} aria-label="Plans">Plans</NavTab>
-          <NavTab active={tab === 3} onClick={() => setTab(3)} aria-label="Library">Library</NavTab>
-          <NavTab active={tab === 4} onClick={() => setTab(4)} aria-label="Promo">Promo</NavTab>
-          <NavTab active={tab === 5} onClick={() => setTab(5)} aria-label="Progress">Progress</NavTab>
+          <NavTab $active={tab === 0} onClick={() => setTab(0)} aria-label="Fitness Tracker">Tracker</NavTab>
+          <NavTab $active={tab === 1} onClick={() => setTab(1)} aria-label="Nutrition">Nutrition</NavTab>
+          <NavTab $active={tab === 2} onClick={() => setTab(2)} aria-label="Plans">Plans</NavTab>
+          <NavTab $active={tab === 3} onClick={() => setTab(3)} aria-label="Library">Library</NavTab>
+          <NavTab $active={tab === 4} onClick={() => setTab(4)} aria-label="Promo">Promo</NavTab>
+          <NavTab $active={tab === 5} onClick={() => setTab(5)} aria-label="Progress">Progress</NavTab>
         </AppNav>
         <ProfileMenuButton onClick={() => setProfileOpen(true)} aria-label="Open profile menu">
           <ProfileAvatar>
@@ -4835,7 +4880,7 @@ function App() {
                 </div>
               )}
             </StripeBuyWrapper>
-            <Button variant="secondary" onClick={handleCloseStripeModal}>Cancel</Button>
+            <Button $variant="secondary" onClick={handleCloseStripeModal}>Cancel</Button>
           </StripeModalCard>
         </StripeOverlay>
       )}
@@ -4904,7 +4949,7 @@ function App() {
                   Buy PDF
                 </Button>
               )}
-              <Button variant="secondary" onClick={handleClosePdfDetail}>
+              <Button $variant="secondary" onClick={handleClosePdfDetail}>
                 Close
               </Button>
             </div>
@@ -4977,7 +5022,7 @@ function App() {
               </div>
             )}
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
-              <Button variant="secondary" onClick={handleCloseVideoModal}>
+              <Button $variant="secondary" onClick={handleCloseVideoModal}>
                 Close
               </Button>
             </div>
@@ -5022,7 +5067,7 @@ function App() {
             )}
             <Button
               data-component="PurchasedPdfsCloseButton"
-              variant="secondary"
+              $variant="secondary"
               onClick={() => setPurchasedPdfsModalOpen(false)}
             >
               Close
@@ -5033,37 +5078,37 @@ function App() {
       {calendarOpen && renderCalendarDrawer()}
       {profileOpen && renderProfileDrawer()}
       <BottomNav>
-        <BottomNavTab active={tab === 0} onClick={() => setTab(0)} aria-label="Fitness Tracker">
+        <BottomNavTab $active={tab === 0} onClick={() => setTab(0)} aria-label="Fitness Tracker">
           <IconWrapper>
             <img src={tabIconImages.tracker} alt="" aria-hidden="true" />
           </IconWrapper>
           Tracker
         </BottomNavTab>
-        <BottomNavTab active={tab === 1} onClick={() => setTab(1)} aria-label="Nutrition">
+        <BottomNavTab $active={tab === 1} onClick={() => setTab(1)} aria-label="Nutrition">
           <IconWrapper>
             <img src={tabIconImages.nutrition} alt="" aria-hidden="true" />
           </IconWrapper>
           Nutrition
         </BottomNavTab>
-        <BottomNavTab active={tab === 2} onClick={() => setTab(2)} aria-label="Plans">
+        <BottomNavTab $active={tab === 2} onClick={() => setTab(2)} aria-label="Plans">
           <IconWrapper>
             <img src={tabIconImages.plans} alt="" aria-hidden="true" />
           </IconWrapper>
           Plans
         </BottomNavTab>
-        <BottomNavTab active={tab === 3} onClick={() => setTab(3)} aria-label="Library">
+        <BottomNavTab $active={tab === 3} onClick={() => setTab(3)} aria-label="Library">
           <IconWrapper>
             <img src={tabIconImages.library} alt="" aria-hidden="true" />
           </IconWrapper>
           Library
         </BottomNavTab>
-        <BottomNavTab active={tab === 4} onClick={() => setTab(4)} aria-label="Promo">
+        <BottomNavTab $active={tab === 4} onClick={() => setTab(4)} aria-label="Promo">
           <IconWrapper>
             <img src={tabIconImages.promo} alt="" aria-hidden="true" />
           </IconWrapper>
           Promo
         </BottomNavTab>
-        <BottomNavTab active={tab === 5} onClick={() => setTab(5)} aria-label="Progress">
+        <BottomNavTab $active={tab === 5} onClick={() => setTab(5)} aria-label="Progress">
           <IconWrapper>
             <img src={tabIconImages.progress} alt="" aria-hidden="true" />
           </IconWrapper>

@@ -56,6 +56,7 @@ export default function NearbyPlacesInput(props: any) {
   const [message, setMessage] = useState<string | null>(null);
   const [results, setResults] = useState<PlaceResult[]>([]);
   const [linkedDocs, setLinkedDocs] = useState<NearbyPlaceDoc[]>([]);
+  const [addingPlaceId, setAddingPlaceId] = useState<string | null>(null);
 
   const placeLat = place?.lat;
   const placeLng = place?.lng;
@@ -143,6 +144,7 @@ export default function NearbyPlacesInput(props: any) {
       return;
     }
     try {
+      setAddingPlaceId(placeResult.placeId);
       const existing = await client.fetch<{ _id: string; categories?: string[] | null } | null>(
         `*[_type == "nearbyPlace" && place.placeId == $placeId][0]{_id, categories}`,
         { placeId: placeResult.placeId }
@@ -181,6 +183,8 @@ export default function NearbyPlacesInput(props: any) {
       }
     } catch (error) {
       setMessage("Unable to add nearby place.");
+    } finally {
+      setAddingPlaceId(null);
     }
   };
 
@@ -270,7 +274,13 @@ export default function NearbyPlacesInput(props: any) {
                     <Text weight="semibold">{result.name || "Nearby place"}</Text>
                     {result.address && <Text size={1}>{result.address}</Text>}
                     <Inline space={2}>
-                      <Button text="Add" mode="ghost" onClick={() => addNearbyPlace(result)} />
+                      <Button
+                        text={addingPlaceId === result.placeId ? "Adding..." : "Add"}
+                        mode="ghost"
+                        onClick={() => addNearbyPlace(result)}
+                        disabled={addingPlaceId === result.placeId}
+                      />
+                      {addingPlaceId === result.placeId && <Spinner muted />}
                     </Inline>
                   </Stack>
                 </Card>
