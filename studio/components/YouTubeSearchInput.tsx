@@ -10,10 +10,9 @@ type YouTubeResult = {
   thumbnail?: string;
 };
 
-const DEFAULT_SEARCH_URL =
-  "http://127.0.0.1:5001/nomadic-fitness/us-central1/api/youtubeSearch";
-
-const getSearchUrl = () => process.env?.YOUTUBE_SEARCH_URL || DEFAULT_SEARCH_URL;
+const getSearchUrl = () =>
+  process.env?.SANITY_STUDIO_YOUTUBE_SEARCH_URL
+  || process.env?.YOUTUBE_SEARCH_URL;
 
 const getItemKey = (currentKey?: string) => {
   if (currentKey) return currentKey;
@@ -36,10 +35,16 @@ export default function YouTubeSearchInput(props: any) {
       setResults([]);
       return;
     }
+    const searchUrl = getSearchUrl();
+    if (!searchUrl) {
+      setMessage("Missing YOUTUBE_SEARCH_URL. Check studio .env for VITE_YOUTUBE_SEARCH_URL.");
+      setResults([]);
+      return;
+    }
     setLoading(true);
     setMessage(null);
     try {
-      const response = await fetch(`${getSearchUrl()}?q=${encodeURIComponent(query.trim())}`);
+      const response = await fetch(`${searchUrl}?q=${encodeURIComponent(query.trim())}`);
       const data = await response.json();
       setResults(Array.isArray(data) ? data : []);
       if (!Array.isArray(data) || data.length === 0) {

@@ -15,6 +15,16 @@ type LegendOption = {
   color: string;
 };
 
+type GoogleMapsMap = {
+  fitBounds: (bounds: any, padding?: number) => void;
+  setCenter: (center: { lat: number; lng: number }) => void;
+  setZoom: (zoom: number) => void;
+};
+
+type GoogleMapsMarker = {
+  setMap: (map: any | null) => void;
+};
+
 type Props = {
   apiKey?: string;
   mapUrl?: string | null;
@@ -26,6 +36,7 @@ type Props = {
   borderRadius?: number | string;
 };
 
+const BOUNDS_PADDING = 80;
 let googleMapsScriptPromise: Promise<void> | null = null;
 const loadGoogleMapsScript = (apiKey: string): Promise<void> => {
   if (typeof window === "undefined") return Promise.resolve();
@@ -51,6 +62,33 @@ const loadGoogleMapsScript = (apiKey: string): Promise<void> => {
 const MARKER_PATH =
   "M12 1C6.9 1 2.75 5.15 2.75 10.25c0 6.4 7.33 14.4 8.6 15.75.35.36.98.36 1.33 0 1.27-1.35 8.6-9.35 8.6-15.75C21.28 5.15 17.1 1 12 1z";
 
+const Legend = ({ options, borderColor }: { options: LegendOption[]; borderColor: string }) => (
+  <div
+    style={{
+      position: "absolute",
+      top: 12,
+      left: 12,
+      display: "flex",
+      gap: 8,
+      flexWrap: "wrap",
+      padding: 6,
+      background: "rgba(255,255,255,0.9)",
+      borderRadius: 12,
+      border: `1px solid ${borderColor}`,
+    }}
+  >
+    {options.map(option => (
+      <div key={option.value} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <svg width="18" height="24" viewBox="0 0 24 34" aria-hidden="true">
+          <path d={MARKER_PATH} fill={option.color} />
+          <circle cx="12" cy="10.5" r="3.5" fill="#fff" />
+        </svg>
+        <span style={{ fontSize: 12 }}>{option.label}</span>
+      </div>
+    ))}
+  </div>
+);
+
 export default function GymLocationMap({
   apiKey,
   mapUrl,
@@ -62,10 +100,12 @@ export default function GymLocationMap({
   borderRadius = 12,
 }: Props) {
   const mapRef = useRef<HTMLDivElement | null>(null);
-  const mapInstance = useRef<any>(null);
-  const markersRef = useRef<any[]>([]);
+  const mapInstance = useRef<GoogleMapsMap | null>(null);
+  const markersRef = useRef<GoogleMapsMarker[]>([]);
+  const applyBoundsRef = useRef<(() => void) | null>(null);
   const [mapsReady, setMapsReady] = React.useState(false);
   const [renderMap, setRenderMap] = React.useState(false);
+  const [mapInitialized, setMapInitialized] = React.useState(false);
 
   useEffect(() => {
     if (!apiKey) return;
@@ -93,7 +133,7 @@ export default function GymLocationMap({
   }, [apiKey]);
 
   useEffect(() => {
-    if (!apiKey || !mapsReady || !renderMap || markers.length === 0) return;
+    if (!apiKey || !mapsReady || !renderMap) return;
     let active = true;
     let resizeObserver: ResizeObserver | null = null;
     const initMap = () => {
@@ -102,55 +142,17 @@ export default function GymLocationMap({
       if (!maps || !mapRef.current) return;
       if (!mapInstance.current) {
         mapInstance.current = new maps.Map(mapRef.current, {
-          center: { lat: markers[0].lat, lng: markers[0].lng },
+          center: { lat: markers[0]?.lat || 0, lng: markers[0]?.lng || 0 },
           zoom: 14,
           mapTypeControl: false,
           fullscreenControl: false,
           streetViewControl: false,
         });
+        setMapInitialized(true);
       }
-      const map = mapInstance.current;
-      markersRef.current.forEach(marker => marker.setMap(null));
-      markersRef.current = [];
-      const bounds = new maps.LatLngBounds();
-      markers.forEach(markerData => {
-          const marker = new maps.Marker({
-            position: { lat: markerData.lat, lng: markerData.lng },
-            map,
-            title: markerData.title,
-            icon: {
-              path: MARKER_PATH,
-              fillColor: markerData.color,
-              fillOpacity: markerData.isDimmed ? 0.3 : 1,
-              strokeColor: "#ffffff",
-              strokeWeight: 1.5,
-              scale: markerData.scale,
-              anchor: new maps.Point(12, 34),
-            },
-          });
-        markersRef.current.push(marker);
-        bounds.extend(new maps.LatLng(markerData.lat, markerData.lng));
-      });
-      const applyBounds = () => {
-        if (!bounds.isEmpty()) {
-          map.fitBounds(bounds, 80);
-          if (markers.length === 1) {
-            map.setZoom(18);
-          }
-        }
-      };
-      const triggerResize = () => {
-        maps.event.trigger(map, "resize");
-        applyBounds();
-      };
-      triggerResize();
-      setTimeout(triggerResize, 120);
-      setTimeout(triggerResize, 360);
-      setTimeout(triggerResize, 720);
-
       if (mapRef.current && typeof ResizeObserver !== "undefined") {
         resizeObserver = new ResizeObserver(() => {
-          triggerResize();
+          applyBoundsRef.current?.();
         });
         resizeObserver.observe(mapRef.current);
       }
@@ -164,6 +166,54 @@ export default function GymLocationMap({
       }
     };
   }, [apiKey, mapsReady, renderMap, markers]);
+
+  useEffect(() => {
+    if (!apiKey || !mapsReady || !renderMap || !mapInitialized) return;
+    const maps = (window as any).google?.maps;
+    const map = mapInstance.current;
+    if (!maps || !map) return;
+    markersRef.current.forEach(marker => marker.setMap(null));
+    markersRef.current = [];
+    const bounds = new maps.LatLngBounds();
+    markers.forEach(markerData => {
+      const marker = new maps.Marker({
+        position: { lat: markerData.lat, lng: markerData.lng },
+        map,
+        title: markerData.title,
+        icon: {
+          path: MARKER_PATH,
+          fillColor: markerData.color,
+          fillOpacity: markerData.isDimmed ? 0.3 : 1,
+          strokeColor: "#ffffff",
+          strokeWeight: 1.5,
+          scale: markerData.scale,
+          anchor: new maps.Point(12, 34),
+        },
+      });
+      markersRef.current.push(marker);
+      bounds.extend(new maps.LatLng(markerData.lat, markerData.lng));
+    });
+    const applyBounds = () => {
+      if (!bounds.isEmpty()) {
+        map.fitBounds(bounds, BOUNDS_PADDING);
+        if (markers.length === 1) {
+          map.setZoom(18);
+        }
+      } else if (markers.length === 1) {
+        map.setCenter({ lat: markers[0].lat, lng: markers[0].lng });
+        map.setZoom(18);
+      }
+    };
+    applyBoundsRef.current = applyBounds;
+    const triggerResize = () => {
+      maps.event.trigger(map, "resize");
+      applyBounds();
+    };
+    triggerResize();
+    setTimeout(triggerResize, 120);
+    setTimeout(triggerResize, 360);
+    setTimeout(triggerResize, 720);
+  }, [apiKey, mapsReady, renderMap, mapInitialized, markers]);
 
   if (!apiKey || markers.length === 0) {
     if (!mapUrl) return null;
@@ -185,30 +235,7 @@ export default function GymLocationMap({
           style={{ border: 0, display: "block" }}
         />
         {legendOptions && legendOptions.length > 0 && (
-          <div
-            style={{
-              position: "absolute",
-              top: 12,
-              left: 12,
-              display: "flex",
-              gap: 8,
-              flexWrap: "wrap",
-              padding: 6,
-              background: "rgba(255,255,255,0.9)",
-              borderRadius: 12,
-              border: `1px solid ${borderColor}`,
-            }}
-          >
-            {legendOptions.map(option => (
-              <div key={option.value} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                <svg width="18" height="24" viewBox="0 0 24 34" aria-hidden="true">
-                  <path d={MARKER_PATH} fill={option.color} />
-                  <circle cx="12" cy="10.5" r="3.5" fill="#fff" />
-                </svg>
-                <span style={{ fontSize: 12 }}>{option.label}</span>
-              </div>
-            ))}
-          </div>
+          <Legend options={legendOptions} borderColor={borderColor} />
         )}
       </div>
     );
@@ -225,30 +252,7 @@ export default function GymLocationMap({
     >
       {renderMap && <div ref={mapRef} style={{ width: "100%", height }} />}
       {legendOptions && legendOptions.length > 0 && (
-        <div
-          style={{
-            position: "absolute",
-            top: 12,
-            left: 12,
-            display: "flex",
-            gap: 8,
-            flexWrap: "wrap",
-            padding: 6,
-            background: "rgba(255,255,255,0.9)",
-            borderRadius: 12,
-            border: `1px solid ${borderColor}`,
-          }}
-        >
-          {legendOptions.map(option => (
-            <div key={option.value} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <svg width="18" height="24" viewBox="0 0 24 34" aria-hidden="true">
-                <path d={MARKER_PATH} fill={option.color} />
-                <circle cx="12" cy="10.5" r="3.5" fill="#fff" />
-              </svg>
-              <span style={{ fontSize: 12 }}>{option.label}</span>
-            </div>
-          ))}
-        </div>
+        <Legend options={legendOptions} borderColor={borderColor} />
       )}
     </div>
   );

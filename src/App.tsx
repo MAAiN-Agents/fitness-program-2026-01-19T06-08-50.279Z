@@ -642,6 +642,17 @@ const IconButton = styled(Button).attrs(dataComponent('IconButton'))`
   align-items: center;
   justify-content: center;
 `;
+const ModalCloseButton = styled(IconButton).attrs(dataComponent('ModalCloseButton'))`
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  outline: none;
+  &:hover, &:focus {
+    background: transparent;
+    color: ${theme.colors.accent2};
+    outline: none;
+  }
+`;
 const NumberPadButton = styled(Button).attrs(dataComponent('NumberPadButton'))`
   min-width: unset;
   margin: 0;
@@ -719,6 +730,27 @@ const Modal = styled.div.attrs(dataComponent('Modal'))`
   overflow-y: auto;
   margin: ${theme.spacing.md};
   ${fadeIn}
+`;
+const GymDetailsOverlay = styled(ModalOverlay).attrs(dataComponent('GymDetailsOverlay'))`
+  align-items: flex-start;
+  padding-top: 16px;
+  padding-bottom: 24px;
+  @media (max-width: 720px) {
+    padding-top: 8px;
+    padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  }
+`;
+const GymDetailsModal = styled(Modal).attrs(dataComponent('GymDetailsModal'))`
+  width: min(860px, 94vw);
+  overflow-y: auto;
+  @media (max-width: 720px) {
+    width: 100%;
+    max-width: 100%;
+    height: calc(100vh - 56px - 96px - env(safe-area-inset-bottom));
+    max-height: calc(100vh - 56px - 96px - env(safe-area-inset-bottom));
+    margin: 0;
+    border-radius: 0;
+  }
 `;
 const InjectModal = styled(Modal).attrs(dataComponent('InjectModal'))`
   max-width: 420px;
@@ -1721,6 +1753,11 @@ function durationToMinutes(duration?: { value: number; unit: string }): number |
   return duration.value;
 }
 
+function setUsesReps(set: ExerciseSet): boolean {
+  const repCount = typeof set.actualReps === "number" ? set.actualReps : set.reps;
+  return typeof repCount === "number" && repCount > 0;
+}
+
 // ---- APP ----
 function App() {
   const { user, loading: authLoading, signInWithGoogle, signOut, hasConfig, getIdToken } = useFirebaseAuth();
@@ -2525,7 +2562,7 @@ function App() {
               { label: "Nutrition", index: 1 },
               { label: "Plans", index: 2 },
               { label: "Library", index: 3 },
-              { label: "Promo", index: 4 },
+              { label: "Location", index: 4 },
               { label: "Progress", index: 5 },
             ].map(item => (
               <DrawerTabButton
@@ -3164,7 +3201,9 @@ function App() {
               if (!ex) {
                 return null;
               }
-              const entryHasDuration = entry.sets.every(set => set.duration && set.duration.value !== undefined);
+              const entryHasOnlyReps = entry.sets.every(set => setUsesReps(set));
+              const entryHasOnlyDuration = entry.sets.every(set => !setUsesReps(set));
+              const trackingLabel = entryHasOnlyReps ? "Reps" : entryHasOnlyDuration ? "Duration" : "Mixed";
               const isCollapsed = collapsedEntries.has(entry.id);
               return (
                 <Card data-component="ExerciseEntryCard" key={entry.id}>
@@ -3174,6 +3213,73 @@ function App() {
                       <strong>{ex.title}</strong>
                       <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>{ex.type}</div>
                     </div>
+                    {ex.videos && ex.videos.length > 0 && (() => {
+                      const primary = ex.videos.find(video => video.isPrimary) || ex.videos[0];
+                      if (!primary) return null;
+                      const extraCount = Math.max(ex.videos.length - 1, 0);
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenVideoModal(ex.videos || [], primary)}
+                          style={{
+                            border: "none",
+                            padding: 0,
+                            background: "transparent",
+                            cursor: "pointer",
+                          }}
+                          aria-label={`Open video ${primary.title || ex.title}`}
+                        >
+                          <div style={{ position: "relative", width: 72, height: 46 }}>
+                            <img
+                              src={`https://img.youtube.com/vi/${primary.youtubeId}/hqdefault.jpg`}
+                              alt={primary.title || ex.title}
+                              style={{
+                                width: 72,
+                                height: 46,
+                                borderRadius: 8,
+                                objectFit: "cover",
+                                border: `1px solid ${theme.colors.border}`,
+                                display: "block",
+                              }}
+                            />
+                            <div
+                              style={{
+                                position: "absolute",
+                                inset: 0,
+                                borderRadius: 8,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                background: "rgba(0,0,0,0.25)",
+                              }}
+                            >
+                              <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M8 5l11 7-11 7V5z" fill="#fff" />
+                              </svg>
+                            </div>
+                            {extraCount > 0 && (
+                              <div
+                                style={{
+                                  position: "absolute",
+                                  right: -6,
+                                  top: -6,
+                                  background: theme.colors.accent,
+                                  color: "#fff",
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  borderRadius: 10,
+                                  padding: "2px 6px",
+                                  border: `1px solid ${theme.colors.card}`,
+                                  boxShadow: theme.shadow.card,
+                                }}
+                              >
+                                +{extraCount}
+                              </div>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })()}
                     <IconButton
                       data-component="ToggleExerciseButton"
                       $variant="secondary"
@@ -3184,15 +3290,15 @@ function App() {
                   </div>
                   {isCollapsed ? (
                     <div style={{ marginTop: 12, fontSize: 12, color: theme.colors.textSecondary }}>
-                      {entry.sets.length} set{entry.sets.length === 1 ? "" : "s"} • {entryHasDuration ? "Duration" : "Reps"} tracking
+                      {entry.sets.length} set{entry.sets.length === 1 ? "" : "s"} • {trackingLabel} tracking
                     </div>
                   ) : (
                     <SetTable>
                       <thead>
                         <tr>
                           <th>Set</th>
-                          <th>{entryHasDuration ? "Duration" : "Weight"}</th>
-                          {!entryHasDuration && <th>Reps</th>}
+                          <th>Weight</th>
+                          <th>Reps / Duration</th>
                           <th>RPE</th>
                         </tr>
                       </thead>
@@ -3201,30 +3307,10 @@ function App() {
                           <tr key={i}>
                             <td>{i + 1}</td>
                           <td>
-                            {entryHasDuration ? (
-                              <div style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", minWidth: 120 }}>
-                                <ReadOnlyValueButton
-                                  data-component="ActualDurationButton"
-                                  onClick={() => openNumberPad(entry.id, i, "actualDuration")}
-                                >
-                                  {set.actualDuration ?? "—"}
-                                </ReadOnlyValueButton>
-                                <span
-                                  title="Actual duration / target duration (min)"
-                                  style={{ display: "inline-flex", alignItems: "center", color: theme.colors.textSecondary }}
-                                >
-                                  <span style={{ fontSize: 16, lineHeight: 1 }}>/</span>
-                                  <span style={{ fontSize: 11, lineHeight: 1, marginLeft: 4 }}>
-                                    {durationToMinutes(set.duration) ?? "—"}m
-                                  </span>
-                                </span>
-                              </div>
-                            ) : (
-                              set.weight
-                            )}
+                            {set.weight}
                           </td>
-                            {!entryHasDuration && (
-                              <td>
+                            <td>
+                              {setUsesReps(set) ? (
                                 <div style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", minWidth: 120 }}>
                                   <ReadOnlyValueButton
                                     data-component="ActualRepsButton"
@@ -3240,8 +3326,26 @@ function App() {
                                     <span style={{ fontSize: 11, lineHeight: 1, marginLeft: 4 }}>{set.reps}</span>
                                   </span>
                                 </div>
-                              </td>
-                            )}
+                              ) : (
+                                <div style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", minWidth: 120 }}>
+                                  <ReadOnlyValueButton
+                                    data-component="ActualDurationButton"
+                                    onClick={() => openNumberPad(entry.id, i, "actualDuration")}
+                                  >
+                                    {set.actualDuration ?? "—"}
+                                  </ReadOnlyValueButton>
+                                  <span
+                                    title="Actual duration / target duration (min)"
+                                    style={{ display: "inline-flex", alignItems: "center", color: theme.colors.textSecondary }}
+                                  >
+                                    <span style={{ fontSize: 16, lineHeight: 1 }}>/</span>
+                                    <span style={{ fontSize: 11, lineHeight: 1, marginLeft: 4 }}>
+                                      {durationToMinutes(set.duration) ?? "—"}m
+                                    </span>
+                                  </span>
+                                </div>
+                              )}
+                            </td>
                             <td>
                               <ReadOnlyValueButton
                                 data-component="ActualRpeButton"
@@ -4418,6 +4522,40 @@ function App() {
   const getTodayHours = (lines?: string[] | null) =>
     (lines || []).find(line => line.startsWith(`${todayLabel}:`)) || null;
   const getHoursList = (lines?: string[] | null) => (lines || []).filter(Boolean);
+  const parseTimeToMinutes = (value: string) => {
+    const match = value.trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
+    if (!match) return null;
+    const hours = Number(match[1]);
+    const minutes = match[2] ? Number(match[2]) : 0;
+    const meridian = match[3].toUpperCase();
+    const normalizedHours = hours % 12 + (meridian === "PM" ? 12 : 0);
+    return normalizedHours * 60 + minutes;
+  };
+  const getOpenNowStatus = (lines?: string[] | null) => {
+    const todayLine = getTodayHours(lines);
+    if (!todayLine) return null;
+    const [, ...rest] = todayLine.split(":");
+    const schedule = rest.join(":").trim();
+    if (!schedule) return null;
+    if (/closed/i.test(schedule)) return false;
+    if (/open 24 hours/i.test(schedule)) return true;
+    const now = new Date();
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    const ranges = schedule.split(/,\s*/);
+    for (const range of ranges) {
+      const parts = range.split(/–|-/).map(part => part.trim());
+      if (parts.length < 2) continue;
+      const start = parseTimeToMinutes(parts[0]);
+      const end = parseTimeToMinutes(parts[1]);
+      if (start === null || end === null) continue;
+      if (end < start) {
+        if (nowMinutes >= start || nowMinutes < end) return true;
+      } else if (nowMinutes >= start && nowMinutes < end) {
+        return true;
+      }
+    }
+    return false;
+  };
   const getMapEmbedUrl = (place?: GooglePlace | null) => {
     if (!place) return null;
     if (typeof place.lat === "number" && typeof place.lng === "number") {
@@ -4448,7 +4586,7 @@ function App() {
     [activeGymLocation, activePlaceTypeFilters]
   );
   const mapMarkers = useMemo(() => {
-    const markers: Array<{ lat: number; lng: number; title: string; color: string; scale: number }> = [];
+    const markers: Array<{ lat: number; lng: number; title: string; color: string; scale: number; isDimmed?: boolean }> = [];
     const lat = activeGymLocation?.place?.lat;
     const lng = activeGymLocation?.place?.lng;
     if (typeof lat === "number" && typeof lng === "number") {
@@ -4556,9 +4694,10 @@ function App() {
             const place = location.place;
             const gymType = formatGymType(location.gymType);
             const metaBits = [place?.city, gymType].filter(Boolean);
+            const openNowStatus = getOpenNowStatus(place?.openingHoursWeekdayDescriptions);
             const openNowLabel =
-              typeof place?.openingHoursOpenNow === "boolean"
-                ? place.openingHoursOpenNow
+              typeof openNowStatus === "boolean"
+                ? openNowStatus
                   ? "Open now"
                   : "Closed now"
                 : null;
@@ -4587,12 +4726,12 @@ function App() {
                             borderRadius: 999,
                             fontSize: 11,
                             fontWeight: 700,
-                            background: place?.openingHoursOpenNow ? "#e6f4ea" : "#fdecea",
-                            color: place?.openingHoursOpenNow ? "#1b5e20" : "#b71c1c",
+                            background: openNowStatus ? "#e6f4ea" : "#fdecea",
+                            color: openNowStatus ? "#1b5e20" : "#b71c1c",
                             marginTop: 6,
                           }}
                         >
-                          {place?.openingHoursOpenNow ? "Open Now" : "Closed"}
+                          {openNowStatus ? "Open Now" : "Closed"}
                         </div>
                       )}
                       {todaysHours && (
@@ -4624,7 +4763,7 @@ function App() {
                     </div>
                     <div style={{ textAlign: "right", fontSize: 12, color: theme.colors.textSecondary }}>
                       {typeof location.internalRating === "number" && (
-                        <div>Internal rating: {location.internalRating.toFixed(1)}</div>
+                        <div>My rating: {location.internalRating.toFixed(1)}</div>
                       )}
                       {typeof place?.googleRating === "number" && (
                         <div>Google rating: {place.googleRating.toFixed(1)}</div>
@@ -4650,18 +4789,15 @@ function App() {
           </Card>
         )}
         {gymDetailsOpen && activeGymLocation && (
-          <ModalOverlay
-            onClick={closeGymDetails}
-            style={{ alignItems: "flex-start", paddingTop: 48, paddingBottom: 24 }}
-          >
-            <Modal onClick={e => e.stopPropagation()} style={{ width: "min(860px, 94vw)", overflowY: "auto" }}>
-              <div style={{ display: "grid", gap: theme.spacing.md }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <GymDetailsOverlay onClick={closeGymDetails}>
+            <GymDetailsModal onClick={e => e.stopPropagation()}>
+              <div style={{ display: "grid", gap: theme.spacing.md, position: "relative" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingRight: 36, gap: 12 }}>
                   <div style={{ display: "grid", gap: 4 }}>
                     <div style={{ fontWeight: 700 }}>
                       {activeGymLocation.place?.name || "Location details"}
                     </div>
-                    {typeof activeGymLocation.place?.openingHoursOpenNow === "boolean" && (
+                    {typeof getOpenNowStatus(activeGymLocation.place?.openingHoursWeekdayDescriptions) === "boolean" && (
                       <div
                         style={{
                           display: "inline-flex",
@@ -4670,12 +4806,18 @@ function App() {
                           borderRadius: 999,
                           fontSize: 11,
                           fontWeight: 700,
-                          background: activeGymLocation.place.openingHoursOpenNow ? "#e6f4ea" : "#fdecea",
-                          color: activeGymLocation.place.openingHoursOpenNow ? "#1b5e20" : "#b71c1c",
+                          background: getOpenNowStatus(activeGymLocation.place?.openingHoursWeekdayDescriptions)
+                            ? "#e6f4ea"
+                            : "#fdecea",
+                          color: getOpenNowStatus(activeGymLocation.place?.openingHoursWeekdayDescriptions)
+                            ? "#1b5e20"
+                            : "#b71c1c",
                           width: "fit-content",
                         }}
                       >
-                        {activeGymLocation.place.openingHoursOpenNow ? "Open Now" : "Closed"}
+                        {getOpenNowStatus(activeGymLocation.place?.openingHoursWeekdayDescriptions)
+                          ? "Open Now"
+                          : "Closed"}
                       </div>
                     )}
                     {getHoursList(activeGymLocation.place?.openingHoursWeekdayDescriptions).length > 0 && (
@@ -4712,58 +4854,57 @@ function App() {
                       </div>
                     )}
                   </div>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                    <div style={{ position: "relative" }}>
-                      <IconButton
-                        aria-label="Filter nearby places"
-                        onClick={() => setGymFiltersMenuOpen(open => !open)}
-                      >
-                        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                        </svg>
-                      </IconButton>
-                      {gymFiltersMenuOpen && (
-                        <div
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginLeft: "auto" }}>
+                    {activeGymLocation.place?.mapsUrl && (
+                      <div style={{ display: "grid", justifyItems: "center", gap: 2 }}>
+                        <IconButton
+                          as="a"
+                          href={activeGymLocation.place.mapsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Open in Google Maps"
+                          aria-label="Open in Google Maps"
                           style={{
-                            position: "absolute",
-                            right: 0,
-                            top: "calc(100% + 8px)",
-                            zIndex: theme.z.modal + 1,
-                            background: theme.colors.card,
+                            width: 28,
+                            height: 28,
+                            padding: 4,
+                            background: "transparent",
+                            boxShadow: "none",
                             border: `1px solid ${theme.colors.border}`,
-                            borderRadius: theme.radii.card,
-                            boxShadow: theme.shadow.card,
-                            padding: theme.spacing.sm,
-                            minWidth: 220,
                           }}
                         >
-                          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Filter by type</div>
-                          <div style={{ display: "grid", gap: 6 }}>
-                            {PLACE_TYPE_OPTIONS.map(option => {
-                              const checked = gymPlaceTypeFilters.includes(option.value);
-                              return (
-                                <label
-                                  key={option.value}
-                                  style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    onChange={() => togglePlaceTypeFilter(option.value)}
-                                  />
-                                  <span>{option.label}</span>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    <Button $variant="secondary" onClick={closeGymDetails}>
-                      Close
-                    </Button>
+                          <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
+                            <path
+                              d="M8 7h9v9M17 7l-10 10"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </IconButton>
+                        <span style={{ fontSize: 10, color: theme.colors.textSecondary }}>Google Maps</span>
+                      </div>
+                    )}
                   </div>
                 </div>
+                <ModalCloseButton
+                  aria-label="Close gym details"
+                  onClick={closeGymDetails}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    right: 0,
+                    width: 28,
+                    height: 28,
+                    padding: 4,
+                    color: theme.colors.text,
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M6 6l12 12M18 6l-12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                </ModalCloseButton>
                 <div style={{ display: "grid", gap: theme.spacing.md }}>
                   <GymLocationMap
                     key={`${gymDetailsOpen}-${activeGymLocation?.id || "gym-map"}`}
@@ -4777,22 +4918,101 @@ function App() {
                     borderRadius={theme.radii.card}
                   />
                   <div style={{ display: "grid", gap: theme.spacing.sm }}>
-                    {activeGymLocation.place?.mapsUrl && (
-                      <Button
-                        as="a"
-                        href={activeGymLocation.place.mapsUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <div
+                        style={{
+                          flex: 1,
+                          fontSize: 12,
+                          color: theme.colors.textSecondary,
+                        }}
                       >
-                        Open in Google Maps
-                      </Button>
-                    )}
+                        {filteredNearbyPlaces.length} nearby places
+                      </div>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <div style={{ position: "relative" }}>
+                          <IconButton
+                            aria-label="Filter nearby places"
+                            onClick={() => setGymFiltersMenuOpen(open => !open)}
+                            style={{
+                              width: 30,
+                              height: 30,
+                              padding: 4,
+                              background: gymFiltersMenuOpen ? theme.colors.accent : theme.colors.card,
+                              color: gymFiltersMenuOpen ? "#fff" : theme.colors.text,
+                              boxShadow: "none",
+                              border: `1px solid ${gymFiltersMenuOpen ? theme.colors.accent : theme.colors.border}`,
+                            }}
+                          >
+                            <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+                              <path
+                                d="M4 6h16M7 12h10M10 18h4"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                              />
+                            </svg>
+                          </IconButton>
+                          {gymFiltersMenuOpen && (
+                            <div
+                              style={{
+                                position: "absolute",
+                                right: 0,
+                                top: "calc(100% + 8px)",
+                                zIndex: theme.z.modal + 1,
+                                background: theme.colors.card,
+                                border: `1px solid ${theme.colors.border}`,
+                                borderRadius: theme.radii.card,
+                                boxShadow: theme.shadow.card,
+                                padding: theme.spacing.sm,
+                                minWidth: 220,
+                              }}
+                            >
+                              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Filter by type</div>
+                              <div style={{ display: "grid", gap: 6 }}>
+                                {PLACE_TYPE_OPTIONS.map(option => {
+                                  const checked = gymPlaceTypeFilters.includes(option.value);
+                                  return (
+                                    <label
+                                      key={option.value}
+                                      style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        onChange={() => togglePlaceTypeFilter(option.value)}
+                                      />
+                                      <span>{option.label}</span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                   <div style={{ display: "grid", gap: theme.spacing.sm }}>
-                    <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>
-                      {filteredNearbyPlaces.length} nearby places
-                    </div>
                     <div style={{ display: "grid", gap: 8 }}>
+                      {filteredNearbyPlaces.length === 0 && (
+                        <div
+                          style={{
+                            minHeight: 220,
+                            borderRadius: theme.radii.card,
+                            border: `1px dashed ${theme.colors.border}`,
+                            background: theme.colors.card,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            textAlign: "center",
+                            color: theme.colors.textSecondary,
+                            fontSize: 13,
+                            padding: theme.spacing.md,
+                          }}
+                        >
+                          No nearby places yet. Use Filters to reveal the saved nearby types.
+                        </div>
+                      )}
                       {filteredNearbyPlaces.map(placeItem => (
                         <Card
                           key={placeItem.id}
@@ -4807,20 +5027,43 @@ function App() {
                               : `1px solid ${theme.colors.border}`,
                           }}
                         >
-                          <div style={{ fontWeight: 700 }}>{placeItem.place?.name || "Nearby place"}</div>
-                          {placeItem.place?.address && (
-                            <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>
-                              {placeItem.place.address}
+                          <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                            <div style={{ display: "grid", gap: 4, justifyItems: "center" }}>
+                              <svg width="20" height="28" viewBox="0 0 24 34" aria-hidden="true">
+                                <path
+                                  d="M12 1C6.9 1 2.75 5.15 2.75 10.25c0 6.4 7.33 14.4 8.6 15.75.35.36.98.36 1.33 0 1.27-1.35 8.6-9.35 8.6-15.75C21.28 5.15 17.1 1 12 1z"
+                                  fill={getTypeColor(placeItem.categories || null, placeItem.place?.types || null)}
+                                />
+                                <circle cx="12" cy="10.5" r="3.5" fill="#fff" />
+                              </svg>
+                              <div style={{ fontSize: 10, color: theme.colors.textSecondary }}>
+                                {(() => {
+                                  const source = [
+                                    ...(placeItem.categories || []),
+                                    ...(placeItem.place?.types || []),
+                                  ];
+                                  const match = PLACE_TYPE_OPTIONS.find(option => source.includes(option.value));
+                                  return match?.label || "Other";
+                                })()}
+                              </div>
                             </div>
-                          )}
+                            <div style={{ display: "grid", gap: 4 }}>
+                              <div style={{ fontWeight: 700 }}>{placeItem.place?.name || "Nearby place"}</div>
+                              {placeItem.place?.address && (
+                                <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>
+                                  {placeItem.place.address}
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </Card>
                       ))}
                     </div>
                   </div>
                 </div>
               </div>
-            </Modal>
-          </ModalOverlay>
+            </GymDetailsModal>
+          </GymDetailsOverlay>
         )}
       </Section>
     );
@@ -4837,7 +5080,7 @@ function App() {
           <NavTab $active={tab === 1} onClick={() => setTab(1)} aria-label="Nutrition">Nutrition</NavTab>
           <NavTab $active={tab === 2} onClick={() => setTab(2)} aria-label="Plans">Plans</NavTab>
           <NavTab $active={tab === 3} onClick={() => setTab(3)} aria-label="Library">Library</NavTab>
-          <NavTab $active={tab === 4} onClick={() => setTab(4)} aria-label="Promo">Promo</NavTab>
+          <NavTab $active={tab === 4} onClick={() => setTab(4)} aria-label="Location">Location</NavTab>
           <NavTab $active={tab === 5} onClick={() => setTab(5)} aria-label="Progress">Progress</NavTab>
         </AppNav>
         <ProfileMenuButton onClick={() => setProfileOpen(true)} aria-label="Open profile menu">
@@ -5102,11 +5345,11 @@ function App() {
           </IconWrapper>
           Library
         </BottomNavTab>
-        <BottomNavTab $active={tab === 4} onClick={() => setTab(4)} aria-label="Promo">
+        <BottomNavTab $active={tab === 4} onClick={() => setTab(4)} aria-label="Location">
           <IconWrapper>
             <img src={tabIconImages.promo} alt="" aria-hidden="true" />
           </IconWrapper>
-          Promo
+          Location
         </BottomNavTab>
         <BottomNavTab $active={tab === 5} onClick={() => setTab(5)} aria-label="Progress">
           <IconWrapper>

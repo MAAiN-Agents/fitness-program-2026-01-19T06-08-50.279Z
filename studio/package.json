@@ -9,7 +9,9 @@
     "start": "sanity start",
     "build": "sanity build",
     "deploy": "sanity deploy",
-    "deploy-graphql": "sanity graphql deploy"
+    "deploy-graphql": "sanity graphql deploy",
+    "set-env-local":"sanity dataset env set SANITY_STUDIO_YOUTUBE_SEARCH_URL \"https://127.0.0.1:3000/us-central1/api/youtubeSearch\"",
+    "set-env-prod":"sanity dataset env set SANITY_STUDIO_YOUTUBE_SEARCH_URL \"https://us-central1-nomadic-fitness.cloudfunctions.net/api/youtubeSearch\""
   },
   "keywords": [
     "sanity"

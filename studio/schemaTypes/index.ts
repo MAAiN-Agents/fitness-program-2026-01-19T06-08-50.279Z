@@ -37,6 +37,45 @@ const setEntry = defineType({
     defineField({ name: "actualDuration", title: "Actual Duration (min)", type: "number" }),
     defineField({ name: "duration", title: "Duration", type: "duration" }),
   ],
+  preview: {
+    select: {
+      reps: "reps",
+      actualReps: "actualReps",
+      actualDuration: "actualDuration",
+      durationValue: "duration.value",
+      durationUnit: "duration.unit",
+      weight: "weight",
+      rpe: "rpe",
+    },
+    prepare({ reps, actualReps, actualDuration, durationValue, durationUnit, weight, rpe }) {
+      const repCount = typeof actualReps === "number" ? actualReps : reps;
+      const showReps = typeof repCount === "number" && repCount > 0;
+      const durationMinutes =
+        typeof actualDuration === "number"
+          ? actualDuration
+          : typeof durationValue === "number"
+            ? durationUnit === "hr"
+              ? durationValue * 60
+              : durationUnit === "sec"
+                ? Math.round(durationValue / 60)
+                : durationValue
+            : null;
+      const title = showReps
+        ? `Reps: ${repCount}`
+        : typeof durationMinutes === "number"
+          ? `Duration: ${durationMinutes} min`
+          : "Set";
+      const subtitleParts = [];
+      if (typeof weight === "number") {
+        subtitleParts.push(weight === 0 ? "Body weight" : `Weight: ${weight}`);
+      }
+      if (typeof rpe === "number") subtitleParts.push(`RPE: ${rpe}`);
+      return {
+        title,
+        subtitle: subtitleParts.join(" • "),
+      };
+    },
+  },
 });
 
 const exerciseEntry = defineType({
@@ -64,6 +103,22 @@ const exerciseEntry = defineType({
       of: [{ type: "setEntry" }],
     }),
   ],
+  preview: {
+    select: {
+      exerciseTitle: "exerciseId.title",
+      userId: "userId",
+      sessionLabel: "sessionId.label",
+    },
+    prepare({ exerciseTitle, userId, sessionLabel }) {
+      const subtitleParts = [userId ? `User ${userId}` : null, sessionLabel ? `Session: ${sessionLabel}` : null].filter(
+        Boolean
+      );
+      return {
+        title: exerciseTitle || "Exercise Entry",
+        subtitle: subtitleParts.join(" • "),
+      };
+    },
+  },
 });
 
 const session = defineType({
@@ -200,6 +255,27 @@ const planExercise = defineType({
     defineField({ name: "reps", title: "Reps", type: "number" }),
     defineField({ name: "duration", title: "Duration", type: "duration" }),
   ],
+  preview: {
+    select: {
+      exerciseTitle: "exerciseId.title",
+      sets: "sets",
+      reps: "reps",
+      durationValue: "duration.value",
+      durationUnit: "duration.unit",
+    },
+    prepare({ exerciseTitle, sets, reps, durationValue, durationUnit }) {
+      const detailParts = [];
+      if (typeof sets === "number") detailParts.push(`Sets: ${sets}`);
+      if (typeof reps === "number") detailParts.push(`Reps: ${reps}`);
+      if (typeof durationValue === "number") {
+        detailParts.push(`Duration: ${durationValue} ${durationUnit || "min"}`);
+      }
+      return {
+        title: exerciseTitle || "Exercise",
+        subtitle: detailParts.join(" • "),
+      };
+    },
+  },
 });
 
 const planSession = defineType({
@@ -304,12 +380,6 @@ const googlePlace = defineType({
       title: "Opening Hours",
       type: "array",
       of: [{ type: "string" }],
-      readOnly: true,
-    }),
-    defineField({
-      name: "openingHoursOpenNow",
-      title: "Open Now",
-      type: "boolean",
       readOnly: true,
     }),
     defineField({

@@ -1,7 +1,7 @@
 // deskStructure.ts
 import S from "@sanity/desk-tool/structure-builder";
 
-export default () =>
+export default (_, context) =>
   S.list()
     .title("Content")
     .items([
@@ -16,7 +16,40 @@ export default () =>
       S.listItem()
         .title("Exercise Entries")
         .schemaType("exerciseEntry")
-        .child(S.documentTypeList("exerciseEntry")),
+        .child(
+          S.list()
+            .title("Exercise Entries")
+            .items([
+              S.listItem()
+                .title("All Entries")
+                .schemaType("exerciseEntry")
+                .child(S.documentTypeList("exerciseEntry")),
+              S.listItem()
+                .title("By User")
+                .child(
+                  S.list()
+                    .title("Users")
+                    .items(async () => {
+                      const client = context.getClient({ apiVersion: "2023-10-01" });
+                      const userIds = await client.fetch(
+                        'array::unique(*[_type=="exerciseEntry" && defined(userId)].userId)'
+                      );
+                      return userIds.map(userId =>
+                        S.listItem()
+                          .title(userId)
+                          .schemaType("exerciseEntry")
+                          .child(
+                            S.documentList()
+                              .title(`Exercise Entries: ${userId}`)
+                              .schemaType("exerciseEntry")
+                              .filter('_type == "exerciseEntry" && userId == $userId')
+                              .params({ userId })
+                          )
+                      );
+                    })
+                ),
+            ])
+        ),
       S.listItem()
         .title("Nutrition Days")
         .schemaType("nutritionDay")

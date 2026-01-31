@@ -22,7 +22,6 @@ type PlaceDetails = {
   mapsUrl?: string | null;
   googleRating?: number | null;
   openingHoursWeekdayDescriptions?: string[] | null;
-  openingHoursOpenNow?: boolean | null;
   openingHoursNextOpenTime?: string | null;
   openingHoursNextCloseTime?: string | null;
   types?: string[] | null;
@@ -106,7 +105,6 @@ export default function GooglePlaceSearchInput(props: any) {
         mapsUrl: data?.mapsUrl || null,
         googleRating: data?.googleRating ?? place.rating ?? null,
         openingHoursWeekdayDescriptions: data?.openingHoursWeekdayDescriptions || null,
-        openingHoursOpenNow: data?.openingHoursOpenNow ?? null,
         openingHoursNextOpenTime: data?.openingHoursNextOpenTime ?? null,
         openingHoursNextCloseTime: data?.openingHoursNextCloseTime ?? null,
         types: data?.types || place.types || null,
