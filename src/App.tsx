@@ -205,7 +205,13 @@ type Exercise = {
   id: string;
   title: string;
   description?: string | null;
-  image?: string | null;
+  image?: {
+    source?: string | null;
+    url?: string | null;
+    freeExercise?: {
+      imagePath?: string | null;
+    } | null;
+  } | string | null;
   imageAssetUrl?: string | null;
   type: string;
   yogaCategory: string | null;
@@ -244,7 +250,6 @@ type GooglePlace = {
   googleRating?: number | null;
   types?: string[] | null;
   openingHoursWeekdayDescriptions?: string[] | null;
-  openingHoursOpenNow?: boolean | null;
   openingHoursNextOpenTime?: string | null;
   openingHoursNextCloseTime?: string | null;
 };
@@ -1417,7 +1422,23 @@ async function fetchExercises(): Promise<Exercise[]> {
       "id": _id,
       title,
       description,
-      image,
+      "image": select(
+        defined(image.source) => image{
+          source,
+          url,
+          "freeExercise": freeExercise{
+            imagePath
+          }
+        },
+        defined(image.url) => image{
+          source,
+          url,
+          "freeExercise": freeExercise{
+            imagePath
+          }
+        },
+        true => image
+      ),
       "imageAssetUrl": imageAsset.asset->url,
       type,
       yogaCategory,
@@ -1470,7 +1491,6 @@ async function fetchGymLocations(): Promise<GymLocation[]> {
         mapsUrl,
         googleRating,
         openingHoursWeekdayDescriptions,
-        openingHoursOpenNow,
         openingHoursNextOpenTime,
         openingHoursNextCloseTime,
         types
@@ -1488,7 +1508,6 @@ async function fetchGymLocations(): Promise<GymLocation[]> {
           mapsUrl,
           googleRating,
           openingHoursWeekdayDescriptions,
-          openingHoursOpenNow,
           openingHoursNextOpenTime,
           openingHoursNextCloseTime,
           types
@@ -1756,6 +1775,27 @@ function durationToMinutes(duration?: { value: number; unit: string }): number |
 function setUsesReps(set: ExerciseSet): boolean {
   const repCount = typeof set.actualReps === "number" ? set.actualReps : set.reps;
   return typeof repCount === "number" && repCount > 0;
+}
+
+const FREE_EXERCISE_IMAGE_BASE_URL =
+  "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/";
+
+function resolveExerciseImageUrl(exercise?: Exercise | null): string | null {
+  if (!exercise?.image) return null;
+  if (typeof exercise.image === "string") {
+    return exercise.image;
+  }
+  if (exercise.image.source === "free-exercise-db") {
+    const path = exercise.image.freeExercise?.imagePath;
+    return path ? `${FREE_EXERCISE_IMAGE_BASE_URL}${path}` : null;
+  }
+  if (exercise.image.source === "url") {
+    return exercise.image.url || null;
+  }
+  return exercise.image.url
+    || (exercise.image.freeExercise?.imagePath
+      ? `${FREE_EXERCISE_IMAGE_BASE_URL}${exercise.image.freeExercise.imagePath}`
+      : null);
 }
 
 // ---- APP ----
@@ -3204,11 +3244,24 @@ function App() {
               const entryHasOnlyReps = entry.sets.every(set => setUsesReps(set));
               const entryHasOnlyDuration = entry.sets.every(set => !setUsesReps(set));
               const trackingLabel = entryHasOnlyReps ? "Reps" : entryHasOnlyDuration ? "Duration" : "Mixed";
+              const exerciseImageUrl = ex.imageAssetUrl || resolveExerciseImageUrl(ex);
               const isCollapsed = collapsedEntries.has(entry.id);
               return (
                 <Card data-component="ExerciseEntryCard" key={entry.id}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <img src={ex.image as string} alt={ex.title} style={{ width: 32, height: 32, borderRadius: 8 }} />
+                    {exerciseImageUrl ? (
+                      <img src={exerciseImageUrl} alt={ex.title} style={{ width: 32, height: 32, borderRadius: 8 }} />
+                    ) : (
+                      <div
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 8,
+                          background: theme.colors.background,
+                          border: `1px solid ${theme.colors.border}`,
+                        }}
+                      />
+                    )}
                     <div style={{ flex: 1 }}>
                       <strong>{ex.title}</strong>
                       <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>{ex.type}</div>
@@ -4276,9 +4329,9 @@ function App() {
           {filteredExercises.map(ex => (
             <Card data-component="ExerciseCard" key={ex.id} style={{ display: "grid", gap: 10 }}>
               <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                {ex.imageAssetUrl || ex.image ? (
+                {(ex.imageAssetUrl || resolveExerciseImageUrl(ex)) ? (
                   <img
-                    src={ex.imageAssetUrl || ex.image || ""}
+                    src={ex.imageAssetUrl || resolveExerciseImageUrl(ex) || ""}
                     alt={ex.title}
                     style={{ width: 64, height: 64, borderRadius: 12, objectFit: "cover" }}
                   />

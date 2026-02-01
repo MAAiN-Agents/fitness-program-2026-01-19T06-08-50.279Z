@@ -12,7 +12,7 @@ type YouTubeResult = {
 
 const getSearchUrl = () =>
   process.env?.SANITY_STUDIO_YOUTUBE_SEARCH_URL
-  || process.env?.YOUTUBE_SEARCH_URL;
+  || process.env?.YOUTUBE_SEARCH_URL || "http://127.0.0.1:5001/nomadic-fitness/us-central1/api/youtubeSearch";
 
 const getItemKey = (currentKey?: string) => {
   if (currentKey) return currentKey;

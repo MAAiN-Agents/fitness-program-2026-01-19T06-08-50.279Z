@@ -3,6 +3,7 @@ import YouTubeSearchInput from "../components/YouTubeSearchInput";
 import GooglePlaceSearchInput from "../components/GooglePlaceSearchInput";
 import InternalRatingStars from "../components/InternalRatingStars";
 import NearbyPlacesInput from "../components/NearbyPlacesInput";
+import FreeExerciseImageInput from "../components/FreeExerciseImageInput";
 
 const duration = defineType({
   name: "duration",
@@ -403,6 +404,64 @@ const googlePlace = defineType({
   ],
 });
 
+const freeExerciseImage = defineType({
+  name: "freeExerciseImage",
+  title: "Free Exercise Image",
+  type: "object",
+  fields: [
+    defineField({ name: "source", title: "Source", type: "string" }),
+    defineField({ name: "exerciseId", title: "Exercise ID", type: "string" }),
+    defineField({ name: "exerciseName", title: "Exercise Name", type: "string" }),
+    defineField({ name: "imagePath", title: "Image Path", type: "string" }),
+  ],
+  components: {
+    input: FreeExerciseImageInput,
+  },
+});
+
+const exerciseImage = defineType({
+  name: "exerciseImage",
+  title: "Exercise Image",
+  type: "object",
+  fields: [
+    defineField({
+      name: "source",
+      title: "Source",
+      type: "string",
+      initialValue: "url",
+      options: {
+        list: [
+          { title: "Free Exercise DB", value: "free-exercise-db" },
+          { title: "Direct URL", value: "url" },
+        ],
+      },
+    }),
+    defineField({
+      name: "url",
+      title: "Image URL",
+      type: "url",
+      hidden: ({ parent }) => parent?.source !== "url",
+    }),
+    defineField({
+      name: "freeExercise",
+      title: "Free Exercise DB",
+      type: "freeExerciseImage",
+      hidden: ({ parent }) => parent?.source !== "free-exercise-db",
+    }),
+  ],
+  validation: Rule =>
+    Rule.custom(value => {
+      if (!value) return true;
+      if (value.source === "url" && !value.url) {
+        return "Provide an image URL.";
+      }
+      if (value.source === "free-exercise-db" && !value.freeExercise?.imagePath) {
+        return "Select an image from Free Exercise DB.";
+      }
+      return true;
+    }),
+});
+
 const gymLocation = defineType({
   name: "gymLocation",
   title: "Gym Location",
@@ -527,7 +586,7 @@ const exercise = defineType({
   fields: [
     defineField({ name: "title", title: "Title", type: "string" }), // name
     defineField({ name: "isCustom", title: "Is this custom? (Did a user create this?)", type: "string" }),
-    defineField({ name: "image", title: "Image", type: "url" }),
+    defineField({ name: "image", title: "Image", type: "exerciseImage" }),
     defineField({
       name: "imageAsset",
       title: "Image Asset (Overrides URL)",
@@ -694,6 +753,8 @@ export const schemaTypes = [
   planDay,
   plan,
   planPdf,
+  freeExerciseImage,
+  exerciseImage,
   googlePlace,
   gymLocation,
   nearbyPlace,
