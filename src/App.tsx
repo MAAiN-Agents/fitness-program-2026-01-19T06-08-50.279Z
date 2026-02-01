@@ -34,8 +34,11 @@ const sanityClient = createClient({
   apiVersion: process.env.REACT_APP_SANITY_API_VERSION || "2024-01-01",
   useCdn: true,
 });
+const sanityClientNoCdn = sanityClient.withConfig({ useCdn: false });
 const sanityFetch = <T,>(query: string, params?: Record<string, unknown>): Promise<T> =>
   (sanityClient as { fetch: (q: string, p?: Record<string, unknown>) => Promise<T> }).fetch(query, params);
+const sanityFetchNoCdn = <T,>(query: string, params?: Record<string, unknown>): Promise<T> =>
+  (sanityClientNoCdn as { fetch: (q: string, p?: Record<string, unknown>) => Promise<T> }).fetch(query, params);
 
 // ---- THEME TOKENS ----
 const theme = {
@@ -281,6 +284,7 @@ type SessionModalState = {
   session: Session | null;
   day: string;
   time: string;
+  weekId: string;
 };
 type NutritionDayPatch = {
   id?: string;
@@ -737,24 +741,27 @@ const Modal = styled.div.attrs(dataComponent('Modal'))`
   ${fadeIn}
 `;
 const GymDetailsOverlay = styled(ModalOverlay).attrs(dataComponent('GymDetailsOverlay'))`
-  align-items: flex-start;
+  align-items: stretch;
   padding-top: 16px;
-  padding-bottom: 24px;
+  padding-bottom: 64px;
+  overflow-y: auto;
   @media (max-width: 720px) {
     padding-top: 8px;
-    padding-bottom: calc(96px + env(safe-area-inset-bottom));
+    padding-bottom: calc(80px + 16px + env(safe-area-inset-bottom));
   }
 `;
 const GymDetailsModal = styled(Modal).attrs(dataComponent('GymDetailsModal'))`
   width: min(860px, 94vw);
-  overflow-y: auto;
+  overflow-y: visible;
+  margin: 0 auto;
   @media (max-width: 720px) {
     width: 100%;
     max-width: 100%;
-    height: calc(100vh - 56px - 96px - env(safe-area-inset-bottom));
-    max-height: calc(100vh - 56px - 96px - env(safe-area-inset-bottom));
-    margin: 0;
+    height: calc(100vh - 56px - 80px - 16px - env(safe-area-inset-bottom));
+    max-height: calc(100vh - 56px - 80px - 16px - env(safe-area-inset-bottom));
+    margin: 0 auto;
     border-radius: 0;
+    overflow-y: auto;
   }
 `;
 const InjectModal = styled(Modal).attrs(dataComponent('InjectModal'))`
@@ -925,7 +932,7 @@ const BottomNav = styled.nav.attrs(dataComponent('BottomNav'))`
   display: flex;
   justify-content: space-around;
   align-items: center;
-  height: 96px;
+  height: 80px;
   z-index: ${theme.z.nav};
 `;
 const BottomNavTab = styled.button.attrs((props) => ({
@@ -939,7 +946,7 @@ const BottomNavTab = styled.button.attrs((props) => ({
   font-size: 0.75rem;
   font-weight: 700;
   line-height: 1.1;
-  padding: ${theme.spacing.sm};
+  padding: 6px 4px;
   flex: 1;
   cursor: pointer;
   display: flex;
@@ -1336,7 +1343,7 @@ const EqualizerIcon = () => (
 );
 
 async function fetchWeeks(userId: string): Promise<Week[]> {
-  return sanityFetch(
+  return sanityFetchNoCdn(
     `*[_type == "week" && userId == $userId]{
       "id": _id,
       userId,
@@ -1644,6 +1651,45 @@ function useAPI(getIdToken?: () => Promise<string | null>) {
         }
         return response.json();
       }),
+    createWeek: ({ startDate, endDate, label }: { startDate: string; endDate: string; label: string }) =>
+      run(async () => {
+        const authHeaders = await getAuthHeaders();
+        const response = await fetch(`${baseUrl}/tracker/weeks`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders },
+          body: JSON.stringify({ startDate, endDate, label }),
+        });
+        if (!response.ok) {
+          throw new Error(`Create week failed with status ${response.status}`);
+        }
+        return response.json();
+      }),
+    createSession: ({ weekId, day, time, label }: { weekId: string; day: string; time: string; label: string }) =>
+      run(async () => {
+        const authHeaders = await getAuthHeaders();
+        const response = await fetch(`${baseUrl}/tracker/weeks/${weekId}/sessions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders },
+          body: JSON.stringify({ day, time, label }),
+        });
+        if (!response.ok) {
+          throw new Error(`Create session failed with status ${response.status}`);
+        }
+        return response.json();
+      }),
+    createExerciseEntry: ({ sessionId, exerciseId, sets }: { sessionId: string; exerciseId: string; sets: ExerciseSet[] }) =>
+      run(async () => {
+        const authHeaders = await getAuthHeaders();
+        const response = await fetch(`${baseUrl}/tracker/sessions/${sessionId}/entries`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders },
+          body: JSON.stringify({ exerciseId, sets }),
+        });
+        if (!response.ok) {
+          throw new Error(`Create entry failed with status ${response.status}`);
+        }
+        return response.json();
+      }),
     getProgressEntries: () =>
       run(async () => {
         const authHeaders = await getAuthHeaders();
@@ -1723,6 +1769,13 @@ function addDays(base: Date, days: number): Date {
   const next = new Date(base);
   next.setDate(next.getDate() + days);
   return next;
+}
+
+function startOfWeekMonday(date: Date): Date {
+  const base = new Date(date);
+  base.setHours(0, 0, 0, 0);
+  const offset = (base.getDay() + 6) % 7;
+  return addDays(base, -offset);
 }
 
 function getUpcomingMondays(count: number): Date[] {
@@ -1866,6 +1919,8 @@ function App() {
   const [activeVideoList, setActiveVideoList] = useState<ExerciseVideo[]>([]);
   const [exerciseDetailModal, setExerciseDetailModal] = useState<Exercise | null>(null);
   const [exerciseImageModal, setExerciseImageModal] = useState<{ url: string; title?: string } | null>(null);
+  const [addWeekModalOpen, setAddWeekModalOpen] = useState(false);
+  const [addWeekDate, setAddWeekDate] = useState(formatDate(new Date()));
   const [processedPdfParam, setProcessedPdfParam] = useState(false);
   const [injectModalOpen, setInjectModalOpen] = useState(false);
   const [injectPlan, setInjectPlan] = useState<Plan | null>(null);
@@ -1894,6 +1949,37 @@ function App() {
     () => Object.fromEntries(exerciseLibrary.map(ex => [ex.id, ex])),
     [exerciseLibrary]
   );
+  const handleAddWeek = async () => {
+    if (!addWeekDate) return;
+    const baseDate = parseDate(addWeekDate);
+    const startDate = startOfWeekMonday(baseDate);
+    const endDate = addDays(startDate, 6);
+    const refreshedWeeks = await refreshWeeks();
+    const existingWeek =
+      (refreshedWeeks || weeks).find(week => {
+        const start = parseDate(week.startDate);
+        const end = parseDate(week.endDate);
+        return baseDate >= start && baseDate <= end;
+      }) || findWeekForDate(baseDate);
+    if (existingWeek) {
+      setSelectedWeek(existingWeek.id);
+      setAddWeekModalOpen(false);
+      return;
+    }
+    const label = `Week of ${formatReadableDate(startDate)}`;
+    const result = await api.createWeek({
+      startDate: formatDate(startDate),
+      endDate: formatDate(endDate),
+      label,
+    });
+    const postCreateWeeks = await refreshWeeks();
+    if (result && (result as { id?: string }).id) {
+      setSelectedWeek(String((result as { id: string }).id));
+    } else if (postCreateWeeks && postCreateWeeks[0]) {
+      setSelectedWeek(postCreateWeeks[0].id);
+    }
+    setAddWeekModalOpen(false);
+  };
   const nutritionSummaryByDate = useMemo(() => {
     const summaryMap = new Map<string, NutritionSummary>();
     nutritionDays.forEach(day => {
@@ -2397,6 +2483,7 @@ function App() {
     if (added) {
       await refreshExercises();
       setExerciseSearchMessage("Exercise added to the library.");
+      setExerciseSearchOpen(false);
     }
   };
 
@@ -2801,27 +2888,38 @@ function App() {
     if (!isAuthed) {
       return renderAuthGate("Fitness Tracker", "Sign in to view and update your training weeks.");
     }
-    const week = weeks.find(w => w.id === selectedWeek);
-    if (!week) {
+    const activeWeek = weeks.find(w => w.id === selectedWeek) || weeks[0] || null;
+    if (!activeWeek) {
       return (
         <Section data-component="FitnessTracker">
           <SectionTitle>Fitness Tracker</SectionTitle>
-          <Card data-component="EmptyWeekCard">No weeks yet. Inject a plan to get started.</Card>
+          <Card data-component="EmptyWeekCard">
+            <div>No weeks yet. Inject a plan to get started.</div>
+            <div style={{ marginTop: 12 }}>
+              <Button
+                data-component="AddTodayWorkoutButton"
+                $variant="secondary"
+                onClick={() => setAddWeekModalOpen(true)}
+              >
+                Add Today&apos;s Workout
+              </Button>
+            </div>
+          </Card>
         </Section>
       );
     }
     return (
       <Section data-component="FitnessTracker">
-        <SectionTitle>{parseDate(week.startDate).getFullYear()} Fitness Tracker</SectionTitle>
+        <SectionTitle>{parseDate(activeWeek.startDate).getFullYear()} Fitness Tracker</SectionTitle>
         <div style={{ fontSize: 12, color: theme.colors.textSecondary, marginBottom: 8 }}>
-          Covering {formatReadableDate(parseDate(week.startDate))} - {formatReadableDate(parseDate(week.endDate))}
+          Covering {formatReadableDate(parseDate(activeWeek.startDate))} - {formatReadableDate(parseDate(activeWeek.endDate))}
         </div>
         <Card data-component="WeekSelector">
           <Label htmlFor="week-select">Select Week</Label>
           <select
             id="week-select"
             data-component="WeekSelect"
-            value={selectedWeek}
+            value={selectedWeek || activeWeek.id}
             onChange={e => setSelectedWeek(e.target.value)}
             style={{ width: "100%", height: 40, borderRadius: 8, marginBottom: 8 }}
           >
@@ -2829,6 +2927,13 @@ function App() {
               <option key={w.id} value={w.id}>{w.label}</option>
             ))}
           </select>
+          <Button
+            data-component="AddTodayWorkoutButton"
+            $variant="secondary"
+            onClick={() => setAddWeekModalOpen(true)}
+          >
+            Add Today&apos;s Workout
+          </Button>
         </Card>
         <Card data-component="WeekGrid">
           <WeekTable>
@@ -2842,7 +2947,7 @@ function App() {
             </thead>
             <tbody>
               {daysOfWeek.map((day, index) => {
-                const dayDate = addDays(parseDate(week.startDate), index);
+                const dayDate = addDays(parseDate(activeWeek.startDate), index);
                 const dayLabel = dayDate.toLocaleDateString("en-US", { month: "short", day: "2-digit" });
                 return (
                 <tr key={day} data-component="WeekTableRow">
@@ -2855,13 +2960,13 @@ function App() {
                     </WeekDayButton>
                   </WeekTableDayCell>
                 {sessionTimes.map(time => {
-                    const sessions = (week.sessions || []).filter(s => s.day === day && s.time === time);
+                    const sessions = (activeWeek.sessions || []).filter(s => s.day === day && s.time === time);
                     return (
                       <td key={time} data-component="WeekTableSessionCell">
                         {sessions.length === 0 ? (
                           <SessionCellButton
                             $variant="secondary"
-                            onClick={() => setSessionModal({ session: null, day, time })}
+                            onClick={() => setSessionModal({ session: null, day, time, weekId: activeWeek.id })}
                             aria-label={`Open session for ${day} ${time}`}
                           >
                             Add
@@ -2873,7 +2978,7 @@ function App() {
                                 key={session.id}
                                 data-component="SessionCellButton"
                                 $variant={session.entries.length > 0 ? "primary" : "secondary"}
-                                onClick={() => setSessionModal({ session, day, time })}
+                                onClick={() => setSessionModal({ session, day, time, weekId: activeWeek.id })}
                                 aria-label={`Open session for ${day} ${time}`}
                               >
                                 {session.label}
@@ -2895,12 +3000,13 @@ function App() {
             session={sessionModal.session}
             day={sessionModal.day}
             time={sessionModal.time}
+            weekId={sessionModal.weekId}
             onClose={() => setSessionModal(null)}
           />
         )}
         {dailyModal && (
           <DailyViewModal
-            week={week}
+            week={activeWeek}
             day={dailyModal.day}
             date={dailyModal.date}
             onClose={() => setDailyModal(null)}
@@ -2930,7 +3036,7 @@ function App() {
     };
     const openSession = (session: Session | null, time: "AM" | "PM") => {
       onClose();
-      setSessionModal({ session, day, time });
+      setSessionModal({ session, day, time, weekId: week.id });
     };
     return (
       <ModalOverlay onClick={onClose}>
@@ -2993,11 +3099,13 @@ function App() {
     session,
     day,
     time,
+    weekId,
     onClose,
   }: {
     session: Session | null;
     day: string;
     time: string;
+    weekId: string;
     onClose: () => void;
   }) {
     // Local draft state for editing entry progress before saving.
@@ -3020,26 +3128,51 @@ function App() {
       durationValue: string;
       durationUnit: string;
     }>>([{ weight: "", reps: "", rpe: "", durationValue: "", durationUnit: "min" }]);
+    useEffect(() => {
+      setEntries(session ? session.entries : []);
+      setCollapsedEntries(new Set(session ? session.entries.map(entry => entry.id) : []));
+      setAdding(false);
+      setNewExerciseId("");
+      setNewSets([{ weight: "", reps: "", rpe: "", durationValue: "", durationUnit: "min" }]);
+    }, [session]);
 
-    function addEntry() {
+    async function addEntry() {
       if (!newExerciseId || !session) return;
-      setEntries([
-        ...entries,
-        {
-          id: uid("entry"),
-          sessionId: session.id,
-          exerciseId: newExerciseId,
-          sets: newSets.map(s => {
-            const durationValue = s.durationValue === "" ? null : Number(s.durationValue) || 0;
-            return {
-              weight: Number(s.weight) || 0,
-              reps: Number(s.reps) || 0,
-              rpe: s.rpe === "" ? undefined : Number(s.rpe) || 0,
-              ...(durationValue !== null ? { duration: { value: durationValue, unit: s.durationUnit || "min" } } : {}),
-            };
-          }),
-        },
-      ]);
+      const setsPayload = newSets.map(s => {
+        const durationValue = s.durationValue === "" ? null : Number(s.durationValue) || 0;
+        return {
+          weight: Number(s.weight) || 0,
+          reps: Number(s.reps) || 0,
+          rpe: s.rpe === "" ? undefined : Number(s.rpe) || 0,
+          ...(durationValue !== null ? { duration: { value: durationValue, unit: s.durationUnit || "min" } } : {}),
+        };
+      });
+      const created = await api.createExerciseEntry({
+        sessionId: session.id,
+        exerciseId: newExerciseId,
+        sets: setsPayload,
+      });
+      const refreshedWeeks = await refreshWeeks();
+      const refreshedSession = refreshedWeeks
+        ?.flatMap(w => w.sessions || [])
+        .find(s => s.id === session.id) || null;
+      if (refreshedSession) {
+        setEntries(refreshedSession.entries || []);
+        setCollapsedEntries(new Set(refreshedSession.entries.map(entry => entry.id)));
+        setSessionModal(prev =>
+          prev ? { ...prev, session: refreshedSession } : prev
+        );
+      } else if (created && (created as { id?: string }).id) {
+        setEntries(prev => [
+          ...prev,
+          {
+            id: String((created as { id: string }).id),
+            sessionId: session.id,
+            exerciseId: newExerciseId,
+            sets: setsPayload,
+          },
+        ]);
+      }
       setAdding(false);
       setNewExerciseId("");
       setNewSets([{ weight: "", reps: "", rpe: "", durationValue: "", durationUnit: "min" }]);
@@ -3234,7 +3367,30 @@ function App() {
               )}
             </>
           ) : (
-            <Card data-component="EmptySessionCard">No session added yet for this slot.</Card>
+            <Card data-component="EmptySessionCard" style={{ display: "grid", gap: 8 }}>
+              <div>No session added yet for this slot.</div>
+              <Button
+                data-component="CreateSessionButton"
+                $variant="secondary"
+                onClick={async () => {
+                  const label = `${day} ${time}`;
+                  const created = await api.createSession({ weekId, day, time, label });
+                  const refreshedWeeks = await refreshWeeks();
+                  const nextSession =
+                    (created as Session | null)
+                    || refreshedWeeks
+                      ?.flatMap(w => w.sessions || [])
+                      .find(s => s.day === day && s.time === time) || null;
+                  if (nextSession) {
+                    setSessionModal({ session: nextSession, day, time, weekId });
+                  }
+                }}
+                disabled={api.loading}
+              >
+                {api.loading && <SpinnerDot />}
+                Add Session
+              </Button>
+            </Card>
           )}
           <div data-component="ExerciseTable">
             {entries.length === 0 && <div>No exercises added yet.</div>}
@@ -4764,7 +4920,10 @@ function App() {
     const mapUrl = getMapEmbedUrl(activeGymLocation?.place || null);
     if (!promo && !hasLocations) {
       return (
-        <Section data-component="AffiliatePromotion">
+        <Section
+          data-component="AffiliatePromotion"
+          style={{ minHeight: "calc(100vh - 80px - 56px)" }}
+        >
           <SectionTitle>Gym Locations</SectionTitle>
           <Card data-component="GymLocationsEmptyCard">
             <div style={{ color: theme.colors.textSecondary }}>No gym locations added yet.</div>
@@ -4776,7 +4935,10 @@ function App() {
       ? `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(promo.url)}`
       : null;
     return (
-      <Section data-component="AffiliatePromotion">
+      <Section
+        data-component="AffiliatePromotion"
+        style={{ minHeight: "calc(100vh - 80px - 56px)" }}
+      >
         {promo && (
           <Card data-component="PromotionCard" style={{ textAlign: "center" }}>
             <div style={{ fontWeight: 600, color: theme.colors.accent2, marginBottom: 4 }}>Planet Fitness Promo</div>
@@ -5383,6 +5545,32 @@ function App() {
               <Button $variant="secondary" onClick={handleCloseVideoModal}>
                 Close
               </Button>
+            </div>
+          </Modal>
+        </ModalOverlay>
+      )}
+      {addWeekModalOpen && (
+        <ModalOverlay onClick={() => setAddWeekModalOpen(false)}>
+          <Modal onClick={e => e.stopPropagation()}>
+            <SectionTitle>Add Today&apos;s Workout</SectionTitle>
+            <div style={{ display: "grid", gap: 8 }}>
+              <Label htmlFor="add-week-date">Pick any date in the week</Label>
+              <Input
+                id="add-week-date"
+                type="date"
+                value={addWeekDate}
+                onChange={e => setAddWeekDate(e.target.value)}
+              />
+              <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>
+                We&apos;ll add the week that contains this date (Monday–Sunday).
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                <Button $variant="secondary" onClick={() => setAddWeekModalOpen(false)}>Cancel</Button>
+                <LoadingButton onClick={handleAddWeek} disabled={api.loading}>
+                  {api.loading && <SpinnerDot />}
+                  Add Week
+                </LoadingButton>
+              </div>
             </div>
           </Modal>
         </ModalOverlay>
