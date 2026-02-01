@@ -924,8 +924,14 @@ const StripeBuyWrapper = styled.div.attrs(dataComponent('StripeBuyWrapper'))`
   border: 1px solid ${theme.colors.border};
   margin-bottom: ${theme.spacing.md};
 `;
-const BottomNav = styled.nav.attrs(dataComponent('BottomNav'))`
+const BottomNavWrapper = styled.div.attrs(dataComponent('BottomNavWrapper'))`
   position: fixed;
+  left: 0; right: 0; bottom: 0;
+  height: 80px;
+  z-index: ${theme.z.nav};
+`;
+const BottomNav = styled.nav.attrs(dataComponent('BottomNav'))`
+  position: absolute;
   left: 0; right: 0; bottom: 0;
   background: ${theme.colors.card};
   box-shadow: ${theme.shadow.navBottom};
@@ -933,7 +939,26 @@ const BottomNav = styled.nav.attrs(dataComponent('BottomNav'))`
   justify-content: space-around;
   align-items: center;
   height: 80px;
-  z-index: ${theme.z.nav};
+`;
+const BottomNavVisibilityToggle = styled.button.attrs(dataComponent('BottomNavVisibilityToggle'))`
+  position: absolute;
+  right: 12px;
+  top: -18px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid ${theme.colors.border};
+  background: ${theme.colors.card};
+  color: ${theme.colors.primary};
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  box-shadow: ${theme.shadow.nav};
+  cursor: pointer;
+  z-index: ${theme.z.nav + 1};
+  &:hover, &:focus {
+    color: ${theme.colors.accent2};
+    outline: 2px solid ${theme.colors.accent2};
+  }
 `;
 const BottomNavTab = styled.button.attrs((props) => ({
   'data-component': 'BottomNavTab',
@@ -1879,6 +1904,7 @@ function App() {
 
   // Navigation state
   const [tab, setTab] = useState(0); // 0:Tracker, 1:Nutrition, 2:Plans, 3:Library, 4:Promo, 5:Progress
+  const [showBottomNav, setShowBottomNav] = useState(true);
 
   // Tracker state
   const [weeks, setWeeks] = useState<Week[]>([]);
@@ -5787,44 +5813,55 @@ function App() {
       )}
       {calendarOpen && renderCalendarDrawer()}
       {profileOpen && renderProfileDrawer()}
-      <BottomNav>
-        <BottomNavTab $active={tab === 0} onClick={() => setTab(0)} aria-label="Fitness Tracker">
-          <IconWrapper>
-            <img src={tabIconImages.tracker} alt="" aria-hidden="true" />
-          </IconWrapper>
-          Tracker
-        </BottomNavTab>
-        <BottomNavTab $active={tab === 1} onClick={() => setTab(1)} aria-label="Nutrition">
-          <IconWrapper>
-            <img src={tabIconImages.nutrition} alt="" aria-hidden="true" />
-          </IconWrapper>
-          Nutrition
-        </BottomNavTab>
-        <BottomNavTab $active={tab === 2} onClick={() => setTab(2)} aria-label="Plans">
-          <IconWrapper>
-            <img src={tabIconImages.plans} alt="" aria-hidden="true" />
-          </IconWrapper>
-          Plans
-        </BottomNavTab>
-        <BottomNavTab $active={tab === 3} onClick={() => setTab(3)} aria-label="Library">
-          <IconWrapper>
-            <img src={tabIconImages.library} alt="" aria-hidden="true" />
-          </IconWrapper>
-          Library
-        </BottomNavTab>
-        <BottomNavTab $active={tab === 4} onClick={() => setTab(4)} aria-label="Location">
-          <IconWrapper>
-            <img src={tabIconImages.promo} alt="" aria-hidden="true" />
-          </IconWrapper>
-          Location
-        </BottomNavTab>
-        <BottomNavTab $active={tab === 5} onClick={() => setTab(5)} aria-label="Progress">
-          <IconWrapper>
-            <img src={tabIconImages.progress} alt="" aria-hidden="true" />
-          </IconWrapper>
-          Progress
-        </BottomNavTab>
-      </BottomNav>
+      <BottomNavWrapper>
+        <BottomNavVisibilityToggle
+          type="button"
+          aria-pressed={showBottomNav}
+          onClick={() => setShowBottomNav(prev => !prev)}
+        >
+          {showBottomNav ? "Hide" : "Show"}
+        </BottomNavVisibilityToggle>
+        {showBottomNav ? (
+          <BottomNav>
+            <BottomNavTab $active={tab === 0} onClick={() => setTab(0)} aria-label="Fitness Tracker">
+              <IconWrapper>
+                <img src={tabIconImages.tracker} alt="" aria-hidden="true" />
+              </IconWrapper>
+              Tracker
+            </BottomNavTab>
+            <BottomNavTab $active={tab === 1} onClick={() => setTab(1)} aria-label="Nutrition">
+              <IconWrapper>
+                <img src={tabIconImages.nutrition} alt="" aria-hidden="true" />
+              </IconWrapper>
+              Nutrition
+            </BottomNavTab>
+            <BottomNavTab $active={tab === 2} onClick={() => setTab(2)} aria-label="Plans">
+              <IconWrapper>
+                <img src={tabIconImages.plans} alt="" aria-hidden="true" />
+              </IconWrapper>
+              Plans
+            </BottomNavTab>
+            <BottomNavTab $active={tab === 3} onClick={() => setTab(3)} aria-label="Library">
+              <IconWrapper>
+                <img src={tabIconImages.library} alt="" aria-hidden="true" />
+              </IconWrapper>
+              Library
+            </BottomNavTab>
+            <BottomNavTab $active={tab === 4} onClick={() => setTab(4)} aria-label="Location">
+              <IconWrapper>
+                <img src={tabIconImages.promo} alt="" aria-hidden="true" />
+              </IconWrapper>
+              Location
+            </BottomNavTab>
+            <BottomNavTab $active={tab === 5} onClick={() => setTab(5)} aria-label="Progress">
+              <IconWrapper>
+                <img src={tabIconImages.progress} alt="" aria-hidden="true" />
+              </IconWrapper>
+              Progress
+            </BottomNavTab>
+          </BottomNav>
+        ) : null}
+      </BottomNavWrapper>
     </>
   );
 }
