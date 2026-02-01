@@ -1864,6 +1864,8 @@ function App() {
   const [videoModalOpen, setVideoModalOpen] = useState(false);
   const [activeVideo, setActiveVideo] = useState<ExerciseVideo | null>(null);
   const [activeVideoList, setActiveVideoList] = useState<ExerciseVideo[]>([]);
+  const [exerciseDetailModal, setExerciseDetailModal] = useState<Exercise | null>(null);
+  const [exerciseImageModal, setExerciseImageModal] = useState<{ url: string; title?: string } | null>(null);
   const [processedPdfParam, setProcessedPdfParam] = useState(false);
   const [injectModalOpen, setInjectModalOpen] = useState(false);
   const [injectPlan, setInjectPlan] = useState<Plan | null>(null);
@@ -3250,7 +3252,19 @@ function App() {
                 <Card data-component="ExerciseEntryCard" key={entry.id}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     {exerciseImageUrl ? (
-                      <img src={exerciseImageUrl} alt={ex.title} style={{ width: 32, height: 32, borderRadius: 8 }} />
+                      <button
+                        type="button"
+                        onClick={() => setExerciseImageModal({ url: exerciseImageUrl, title: ex.title })}
+                        aria-label={`Open ${ex.title} image`}
+                        style={{
+                          border: "none",
+                          padding: 0,
+                          background: "transparent",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <img src={exerciseImageUrl} alt={ex.title} style={{ width: 32, height: 32, borderRadius: 8 }} />
+                      </button>
                     ) : (
                       <div
                         style={{
@@ -3341,6 +3355,39 @@ function App() {
                       {isCollapsed ? <PlusIcon /> : <MinusIcon />}
                     </IconButton>
                   </div>
+                  {ex.description && (
+                    <div style={{ display: "grid", gap: 6 }}>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: theme.colors.textSecondary,
+                          lineHeight: 1.5,
+                          display: "-webkit-box",
+                          WebkitLineClamp: 3,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                        }}
+                      >
+                        {ex.description}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setExerciseDetailModal(ex)}
+                        style={{
+                          border: "none",
+                          padding: 0,
+                          background: "none",
+                          cursor: "pointer",
+                          color: theme.colors.accent2,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          textAlign: "left",
+                        }}
+                      >
+                        More
+                      </button>
+                    </div>
+                  )}
                   {isCollapsed ? (
                     <div style={{ marginTop: 12, fontSize: 12, color: theme.colors.textSecondary }}>
                       {entry.sets.length} set{entry.sets.length === 1 ? "" : "s"} • {trackingLabel} tracking
@@ -4330,11 +4377,26 @@ function App() {
             <Card data-component="ExerciseCard" key={ex.id} style={{ display: "grid", gap: 10 }}>
               <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                 {(ex.imageAssetUrl || resolveExerciseImageUrl(ex)) ? (
-                  <img
-                    src={ex.imageAssetUrl || resolveExerciseImageUrl(ex) || ""}
-                    alt={ex.title}
-                    style={{ width: 64, height: 64, borderRadius: 12, objectFit: "cover" }}
-                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const url = (typeof ex.imageAssetUrl === "string" ? ex.imageAssetUrl : null) || resolveExerciseImageUrl(ex);
+                      if (url) setExerciseImageModal({ url, title: ex.title });
+                    }}
+                    aria-label={`Open ${ex.title} image`}
+                    style={{
+                      border: "none",
+                      padding: 0,
+                      background: "transparent",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <img
+                      src={ex.imageAssetUrl || resolveExerciseImageUrl(ex) || ""}
+                      alt={ex.title}
+                      style={{ width: 64, height: 64, borderRadius: 12, objectFit: "cover", display: "block" }}
+                    />
+                  </button>
                 ) : (
                   <div
                     style={{
@@ -5253,7 +5315,7 @@ function App() {
         </ModalOverlay>
       )}
       {videoModalOpen && activeVideo && (
-        <ModalOverlay onClick={handleCloseVideoModal}>
+        <ModalOverlay onClick={handleCloseVideoModal} style={{ zIndex: theme.z.modal + 2 }}>
           <Modal onClick={e => e.stopPropagation()}>
             <SectionTitle>{activeVideo.title || "Exercise Video"}</SectionTitle>
             <div
@@ -5321,6 +5383,170 @@ function App() {
               <Button $variant="secondary" onClick={handleCloseVideoModal}>
                 Close
               </Button>
+            </div>
+          </Modal>
+        </ModalOverlay>
+      )}
+      {exerciseDetailModal && (
+        <ModalOverlay onClick={() => setExerciseDetailModal(null)}>
+          <Modal onClick={e => e.stopPropagation()}>
+            <div style={{ display: "grid", gap: 12 }}>
+              <div style={{ fontWeight: 700 }}>{exerciseDetailModal.title}</div>
+              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                {(exerciseDetailModal.imageAssetUrl || resolveExerciseImageUrl(exerciseDetailModal)) ? (
+                  <img
+                    src={exerciseDetailModal.imageAssetUrl || resolveExerciseImageUrl(exerciseDetailModal) || ""}
+                    alt={exerciseDetailModal.title}
+                    style={{ width: 96, height: 96, borderRadius: 12, objectFit: "cover" }}
+                    onClick={() => {
+                      const url = exerciseDetailModal.imageAssetUrl || resolveExerciseImageUrl(exerciseDetailModal);
+                      if (url) setExerciseImageModal({ url, title: exerciseDetailModal.title });
+                    }}
+                  />
+                ) : null}
+                <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>
+                  {[exerciseDetailModal.type, exerciseDetailModal.muscle, exerciseDetailModal.difficulty]
+                    .filter(Boolean)
+                    .join(" • ")}
+                  {exerciseDetailModal.yogaCategory ? ` • ${exerciseDetailModal.yogaCategory}` : ""}
+                </div>
+              </div>
+              <div style={{ display: "grid", gap: 6 }}>
+                <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", color: theme.colors.textSecondary }}>
+                  Details
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {exerciseDetailModal.type && (
+                    <div style={{ fontSize: 11, fontWeight: 700, padding: "4px 8px", borderRadius: 999, background: theme.colors.background, border: `1px solid ${theme.colors.border}` }}>
+                      {exerciseDetailModal.type}
+                    </div>
+                  )}
+                  {exerciseDetailModal.muscle && (
+                    <div style={{ fontSize: 11, fontWeight: 700, padding: "4px 8px", borderRadius: 999, background: theme.colors.background, border: `1px solid ${theme.colors.border}` }}>
+                      {exerciseDetailModal.muscle}
+                    </div>
+                  )}
+                  {exerciseDetailModal.difficulty && (
+                    <div style={{ fontSize: 11, fontWeight: 700, padding: "4px 8px", borderRadius: 999, background: theme.colors.background, border: `1px solid ${theme.colors.border}` }}>
+                      {exerciseDetailModal.difficulty}
+                    </div>
+                  )}
+                  {exerciseDetailModal.yogaCategory && (
+                    <div style={{ fontSize: 11, fontWeight: 700, padding: "4px 8px", borderRadius: 999, background: theme.colors.background, border: `1px solid ${theme.colors.border}` }}>
+                      {exerciseDetailModal.yogaCategory}
+                    </div>
+                  )}
+                  {exerciseDetailModal.source && (
+                    <div style={{ fontSize: 11, fontWeight: 700, padding: "4px 8px", borderRadius: 999, background: theme.colors.background, border: `1px solid ${theme.colors.border}` }}>
+                      {exerciseDetailModal.source}
+                    </div>
+                  )}
+                  {exerciseDetailModal.equipments && exerciseDetailModal.equipments.length > 0 && (
+                    <div style={{ fontSize: 11, fontWeight: 700, padding: "4px 8px", borderRadius: 999, background: theme.colors.background, border: `1px solid ${theme.colors.border}` }}>
+                      {exerciseDetailModal.equipments.join(", ")}
+                    </div>
+                  )}
+                </div>
+              </div>
+              {exerciseDetailModal.videos && exerciseDetailModal.videos.length > 0 && (() => {
+                const primary = exerciseDetailModal.videos.find(video => video.isPrimary) || exerciseDetailModal.videos[0];
+                const extraCount = Math.max(exerciseDetailModal.videos.length - 1, 0);
+                return (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {primary && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenVideoModal(exerciseDetailModal.videos || [], primary)}
+                        style={{
+                          border: "none",
+                          padding: 0,
+                          background: "transparent",
+                          cursor: "pointer",
+                        }}
+                        aria-label={`Open video ${primary.title || "demo"}`}
+                      >
+                        <img
+                          src={`https://img.youtube.com/vi/${primary.youtubeId}/hqdefault.jpg`}
+                          alt={primary.title || exerciseDetailModal.title}
+                          style={{
+                            width: 88,
+                            height: 56,
+                            borderRadius: 10,
+                            objectFit: "cover",
+                            border: `1px solid ${theme.colors.border}`,
+                          }}
+                        />
+                      </button>
+                    )}
+                    {extraCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenVideoModal(exerciseDetailModal.videos || [], primary)}
+                        style={{
+                          width: 56,
+                          height: 56,
+                          borderRadius: 10,
+                          border: `1px dashed ${theme.colors.border}`,
+                          background: theme.colors.background,
+                          color: theme.colors.textSecondary,
+                          fontWeight: 700,
+                          cursor: "pointer",
+                        }}
+                        aria-label={`Open ${extraCount} more videos`}
+                      >
+                        +{extraCount}
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
+              {exerciseDetailModal.description && (
+                <ExerciseInstructionDisplay
+                  text={exerciseDetailModal.description}
+                  textSecondary={theme.colors.textSecondary}
+                  accentColors={{
+                    tip: "#2E7D32",
+                    caution: "#C62828",
+                    variations: "#6D4C41",
+                    safety: "#F9A825",
+                  }}
+                />
+              )}
+              {exerciseDetailModal.safety && (
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: theme.colors.text,
+                    background: "#FFF4CC",
+                    border: "1px solid #F2D88A",
+                    borderRadius: 10,
+                    padding: "6px 8px",
+                  }}
+                >
+                  <strong style={{ marginRight: 6 }}>Safety</strong>
+                  {exerciseDetailModal.safety}
+                </div>
+              )}
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <Button $variant="secondary" onClick={() => setExerciseDetailModal(null)}>Close</Button>
+              </div>
+            </div>
+          </Modal>
+        </ModalOverlay>
+      )}
+      {exerciseImageModal && (
+        <ModalOverlay onClick={() => setExerciseImageModal(null)}>
+          <Modal onClick={e => e.stopPropagation()}>
+            <div style={{ display: "grid", gap: 12 }}>
+              <div style={{ fontWeight: 700 }}>{exerciseImageModal.title || "Exercise image"}</div>
+              <img
+                src={exerciseImageModal.url}
+                alt={exerciseImageModal.title || "Exercise image"}
+                style={{ width: "100%", borderRadius: 12, objectFit: "cover" }}
+              />
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <Button $variant="secondary" onClick={() => setExerciseImageModal(null)}>Close</Button>
+              </div>
             </div>
           </Modal>
         </ModalOverlay>
