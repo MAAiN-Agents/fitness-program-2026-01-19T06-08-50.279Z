@@ -1796,11 +1796,34 @@ function addDays(base: Date, days: number): Date {
   return next;
 }
 
+function addMonths(base: Date, months: number): Date {
+  const next = new Date(base);
+  const day = next.getDate();
+  next.setDate(1);
+  next.setMonth(next.getMonth() + months);
+  const daysInMonth = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+  next.setDate(Math.min(day, daysInMonth));
+  return next;
+}
+
 function startOfWeekMonday(date: Date): Date {
   const base = new Date(date);
   base.setHours(0, 0, 0, 0);
   const offset = (base.getDay() + 6) % 7;
   return addDays(base, -offset);
+}
+
+function getMondaysFromDate(startDate: Date, count: number): Date[] {
+  const results = [];
+  let cursor = startOfWeekMonday(startDate);
+  if (cursor < startDate) {
+    cursor = addDays(cursor, 7);
+  }
+  for (let i = 0; i < count; i += 1) {
+    results.push(new Date(cursor));
+    cursor = addDays(cursor, 7);
+  }
+  return results;
 }
 
 function getUpcomingMondays(count: number): Date[] {
@@ -2050,7 +2073,7 @@ function App() {
             return {
               title: exercise?.title || "Unknown Exercise",
               type: exercise?.type || "Unknown",
-              sets: entry.sets.map(set => ({
+              sets: entry?.sets?.map(set => ({
                 weight: set.weight,
                 reps: set.reps,
                 rpe: set.rpe,
@@ -2418,7 +2441,7 @@ function App() {
       next: sortedNutritionDates[nextIndex],
     };
   };
-  const upcomingMondays = getUpcomingMondays(12);
+  const injectMondayOptions = getMondaysFromDate(addMonths(new Date(), -1), 12);
   const injectWeekLabelOptions = Array.from({ length: 4 }, (_, i) => `Week ${weeks.length + i + 1}`);
   const handleConfirmInjectPlan = async () => {
     if (!injectPlan || !injectMondayDate) return;
@@ -4374,7 +4397,7 @@ function App() {
                 onClick={() => {
                   setInjectPlan(selectedPlan);
                   setInjectWeekLabel(`Week ${weeks.length + 1}`);
-                  setInjectMondayDate(formatDate(upcomingMondays[0]));
+                  setInjectMondayDate(formatDate(getUpcomingMondays(1)[0]));
                   setInjectModalOpen(true);
                 }}
               >
@@ -4418,7 +4441,7 @@ function App() {
                 onChange={e => setInjectMondayDate(e.target.value)}
                 style={{ width: "100%", height: 40, borderRadius: 8, marginBottom: 12 }}
               >
-                {upcomingMondays.map((date: Date) => (
+                {injectMondayOptions.map((date: Date) => (
                   <option key={formatDate(date)} value={formatDate(date)}>
                     {formatReadableDate(date)}
                   </option>
